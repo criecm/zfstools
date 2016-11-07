@@ -1,0 +1,261 @@
+#!/bin/sh
+#
+# destroy snapshots not corresponding to the expression given in the volume given
+#
+
+usage() {
+  echo "usage: $0 [-r] [-g \"GREP_EXPR\"] [-d] [-h] KEEPEXPR ZFSVOLUME" 
+  echo "eg: $0 5l10d5w3m2y ZLIP-ftp/sav"
+  echo "  KEEPEXPR: <nbhours>h<nbdays>d<nbweeks>w<nbmonths>m<nbyears>y"
+  echo "  eg: 5h10d4w3m2y for 5 last snapshots, 10 days, 4 weeks, 3 months and 2 years"
+  echo ""
+  echo "  -r (env CLEANSNAP_RECURSE): will destroy recursively (zfs destroy -r)"
+  echo "  -g GREP_EXPR (env CLEANSNAP_GREP): will use it to select snapshots (by default match GMT-YYYY.MM.DD-HH.mm.ss)"
+  echo "  -v N (env CLEANSNAP_VERBOSE): will display more information (if N > 0 for now)"
+  echo "  -d (env CLEANSNAP_FAKE): no destroy command will be launched for real, but displayed"
+  echo "  -h you are here :)"
+  exit ${1:-1}
+}
+
+CLEANSNAP_VERBOSE=${CLEANSNAP_VERBOSE:-0}
+ORIGARGS=$@
+while getopts rg:dv:h option
+do
+  case $option in
+    r)
+      CLEANSNAP_RECURSE=yes
+    ;;
+    g)
+      CLEANSNAP_GREP=$OPTARG
+    ;;
+    d)
+      CLEANSNAP_FAKE=1
+    ;;
+    v)
+      CLEANSNAP_VERBOSE=$OPTARG
+    ;;
+    h)
+      usage 0
+    ;;
+  esac
+done
+# shift getopt args from ARGV
+shift $(expr $OPTIND - 1)
+
+if [ $# -ne 2 ]; then
+  usage
+fi
+if ! ( echo $1 | egrep '^[[:digit:]]+h[[:digit:]]+d[[:digit:]]+w[[:digit:]]+m[[:digit:]]+y' > /dev/null ); then
+  echo "expression \"$EXPR\" doesn't match :("
+  usage
+fi
+
+getsnapdate() {
+  LC_TIME=C date -jnu -f '%a %b %e %R %Y' +%s "$(LC_TIME=C zfs list -H -o creation $1| cut -c 1-21)"
+}
+say() {
+  if [ -z "$CLEANSNAP_FAKE" ]; then
+    if [ -z "$TERM" ]; then
+      echo "$0[$$]" $@ >> /var/log/clean_zfs_snaps.log
+    else
+      echo "$0[$$]" $@ | tee -a /var/log/clean_zfs_snaps.log
+    fi
+  else
+    echo $@
+  fi
+}
+doit() {
+  say $@
+  if [ -z "$CLEANSNAP_FAKE" ]; then
+    eval $@
+  fi
+}
+debug() {
+  if [ $CLEANSNAP_VERBOSE -gt 0 ]; then
+    [ -z "$TERM" ] && say $@ || echo $@
+  fi
+}
+error_with_logs() {
+  say $@;
+  echo "zfs_clean_snap $EXPR $VOL: $*" | /usr/local/bin/mutt -s "Erreur de zfs_clean_snap sur $(hostname)" $(for log in $TODELLIST $CHECKLIST $FULLLIST $WORKLIST; do echo -- "-a $log "; done) sysadm@ec-m.fr
+}
+
+export CLEANSNAP_RECURSE CLEANSNAP_GREP CLEANSNAP_FAKE CLEANSNAP_VERBOSE
+
+# lock (not more than one by pool)
+if ! [ "$LOCKED" != "YAISSE" ]; then
+  exec lockf -s -t 1600 /tmp/zfs_clean_snap_${2%%/*}.lock $0 $*
+fi
+
+TODELLIST=/tmp/zfs_clean_snap_${2%%/*}.todel
+CHECKLIST=/tmp/zfs_clean_snap_${2%%/*}.tocheck
+FULLLIST=/tmp/zfs_clean_snap_${2%%/*}.fullist
+WORKLIST=/tmp/zfs_clean_snap_${2%%/*}.list
+
+for tmpfile in $TODELLIST $CHECKLIST $FULLLIST $WORKLIST; do
+  if [ -f $tmpfile ]; then
+    echo "derniere execution non finie: $tmpfile existe" 1>&2
+    exit 1
+  fi
+  touch $tmpfile
+done
+
+say "$(date) $0 $*"
+
+EXPR=$1
+VOL=$2
+
+NBHOURS=${EXPR%%h*}
+EXPR=${EXPR##*h}
+NBDAYS=${EXPR%%d*}
+EXPR=${EXPR##*d}
+NBWEEKS=${EXPR%%w*}
+EXPR=${EXPR##*w}
+NBMONTHS=${EXPR%%m*}
+EXPR=${EXPR##*m}
+NBYEARS=${EXPR%%y*}
+#EXPR=${EXPR##*y}
+debug "Will save $NBHOURS hours, $NBDAYS days, $NBWEEKS weeks, $NBMONTHS months and $NBYEARS years of snapshots"
+
+GREPSNAP=${CLEANSNAP_GREP:-'GMT-2[0-9][0-9][0-9]\.[01][0-9]\.[0-3][0-9]-[0-2][0-9]\.[0-5][0-9]\.[0-5][0-9]$'}
+
+OLDHOURLY=$(date -u -v -$(($NBHOURS +1))H +%s)
+OLDDAILY=$(date -u -v -$(($NBDAYS +1))d +%s)
+OLDWEEKLY=$(date -u -v -$(($NBWEEKS +1))w +%s)
+OLDMONTHLY=$(date -u -v -$(($NBMONTHS +1))m +%s)
+OLDYEARLY=$(date -u -v -$(($NBYEARS +1))y +%s)
+
+# la fonction principale
+# usage: cleanupvol volume list
+cleanupvol() {
+  volume=$1
+  TMPLIST=$WORKLIST.tmp
+  : > $TMPLIST
+  local NBHOURS NBDAYS NBWEEKS NBMONTHS NBYEARS
+  grep "^$volume@" $WORKLIST | while read name; do
+    # skip if already processed
+    if grep -q "^$name" $CHECKLIST; then
+      continue
+    fi
+    ts=$(getsnapdate $name)
+    KEEPIT=""
+    # skip if format doesn't match
+    if [ $? -ne 0 ] || [ -z "$ts" ]; then
+      continue
+    fi
+    if [ $NBHOURS -gt 0 ]; then
+      if [ $ts -ge $OLDHOURLY ]; then
+        if [ -z "$LASTHOUR" ]; then
+          LASTHOUR=$ts
+          KEEPIT=$KEEPIT" hourly"
+          NBHOURS=$(($NBHOURS - 1))
+        elif [ $ts -ge $(date -ju -f %s -v +55M +%s $LASTHOUR) ]; then
+          LASTHOUR=$ts
+          KEEPIT=$KEEPIT" hourly"
+          NBHOURS=$(($NBHOURS - 1))
+        fi
+      fi
+    fi
+    # daily: 1 day after than $LASTDAY
+    if [ $NBDAYS -gt 0 ]; then
+      if [ $ts -ge $OLDDAILY ]; then
+        if [ -z "$LASTDAY" ]; then
+          LASTDAY=$ts
+          KEEPIT=$KEEPIT" daily"
+          NBDAYS=$(($NBDAYS - 1))
+        elif [ $ts -ge $(date -ju -f %s -v +23H +%s $LASTDAY) ]; then
+          LASTDAY=$ts
+          KEEPIT=$KEEPIT" daily"
+          NBDAYS=$(($NBDAYS - 1))
+        fi
+      fi
+    fi
+    # weekly: 1 week after than $LASTWEEK
+    if [ $NBWEEKS -gt 0 ]; then
+      if [ $ts -ge $OLDWEEKLY ]; then
+        if [ -z "$LASTWEEK" ]; then
+          LASTWEEK=$ts
+          KEEPIT=$KEEPIT" weekly"
+          NBWEEKS=$(($NBWEEKS - 1))
+        elif [ $ts -ge $(date -ju -f %s -v +166H +%s $LASTWEEK) ]; then
+          LASTWEEK=$ts
+          KEEPIT=$KEEPIT" weekly"
+          NBWEEKS=$(($NBWEEKS - 1))
+        fi
+      fi
+    fi
+    # monthly: 1 month after than $LASTMONTH
+    if [ $NBMONTHS -gt 0 ]; then
+      if [ $ts -ge $OLDMONTHLY ]; then
+        if [ -z "$LASTMONTH" ]; then
+          LASTMONTH=$ts
+          KEEPIT=$KEEPIT" monthly"
+          NBMONTHS=$(($NBMONTHS - 1))
+        elif [ $ts -ge $(date -ju -f %s -v +30d +%s $LASTMONTH) ]; then
+          LASTMONTH=$ts
+          KEEPIT=$KEEPIT" monthly"
+          NBMONTHS=$(($NBMONTHS - 1))
+        fi
+      fi
+    fi
+    # yearly: 1 year after than $LASTYEAR
+    if [ $NBYEARS -gt 0 ]; then
+      if [ $ts -ge $OLDYEARLY ]; then
+        if [ -z "$LASTYEAR" ]; then
+          LASTYEAR=$ts
+          KEEPIT=$KEEPIT" yearly"
+          NBYEARS=$(($NBYEARS - 1))
+        elif [ $ts -ge $(date -ju -f %s -v +364d +%s $LASTYEAR) ]; then
+          LASTYEAR=$ts
+          KEEPIT=$KEEPIT" yearly"
+          NBYEARS=$(($NBYEARS - 1))
+        fi
+      fi
+    fi
+    if [ -n "$KEEPIT" ]; then
+      debug "Keeping $name ($KEEPIT)"
+    else
+      debug "will destroy ${CLEANSNAP_RECURSE:+-r} $name ($ts)"
+      echo "$name" >> $TODELLIST
+      if [ -n "$CLEANSNAP_RECURSE" ]; then
+        grep -v "^${volume}.*@${name#*@}$" $WORKLIST > $TMPLIST
+        grep "^${volume}.*@${name#*@}$" $WORKLIST >> $CHECKLIST
+      else
+        grep -v "^${name}$" $WORKLIST > $TMPLIST
+        grep "^${name}$" $WORKLIST >> $CHECKLIST
+      fi
+    fi
+  done
+  test -s $TMPLIST && mv $TMPLIST $WORKLIST || rm $TMPLIST
+}
+
+# c'est parti
+zfs list -t snapshot -o name -r $VOL | grep '^'$VOL'.*@'$GREPSNAP > $FULLLIST
+cp $FULLLIST $WORKLIST
+for vol in $(sed 's/@.*$//' $FULLLIST | uniq); do
+  debug "Cleaning $vol"
+  cleanupvol $vol
+done
+ERRS=""
+if [ -s $TODELLIST ]; then
+  # A ce moment on efface pour de vrai
+  for zsnap in $(cat $TODELLIST); do 
+    if ! doit "zfs destroy -d${CLEANSNAP_RECURSE:+r} $zsnap"; then
+      ERRS=$ERRS" "$zsnap
+    fi
+  done
+  if [ ! -z "$ERRS" ]; then
+    error_with_logs "Erreurs a la suppression de $ERRS :("
+  else
+    # check
+    debug "checking"
+    zfs list -t snapshot -o name -r $VOL | grep '^'$VOL'.*@'$GREPSNAP > $WORKLIST
+    CHECK=$(cat $CHECKLIST $WORKLIST | sort | uniq -d)
+    if [ -n "$CHECK" ]; then
+      error_with_logs "checks: snapshots en trop a la fin: $CHECK"
+    else
+      say "done :)"
+    fi
+  fi
+fi
+rm $FULLLIST $WORKLIST $TODELLIST $CHECKLIST

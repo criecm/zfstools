@@ -1,0 +1,642 @@
+#!/bin/sh -f
+#
+# Helper to migrate (and maintain) a copy of a ZFS volume
+# through ssh if needed (mbuffer for data stream if wanted)
+#
+# TODO:
+#  * suppress new excludes on dest
+#  * transmit new non-excludes before
+#
+# TOTEST:
+#  * restore
+#  * pre-flight checks on mountpoints (check source and already corrected dest)
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+
+# VARIABLES that change things: (no options for those ones)
+# - CHANGEDSTHOST <oldname> : will use oldname to search snapshots
+#   (and clean them)
+# - SSH_CIPHERS : list of preferred ssh ciphers (ssh -c)
+##################
+# default config #
+##################
+INCOPT=${INCOPT:-"-i"}
+SENDOPT=${SENDOPT:-""}
+RECVOPT=${RECVOPT:-""}
+JUSTFORFUN=${JUSTFORFUN:-""}
+MYNAME=${MYNAME:-$(hostname -s)}
+VERBOSE=${VERBOSE:-0}
+SSH_CIPHERS="arcfour128,arcfour256,arcfour,blowfish-cbc,aes128-cbc,aes128-ctr,cast128-cbc"
+
+SRCZFSLIST=${TMPDIR:-/var/tmp}/srczfslist.$$
+DSTZFSLIST=${TMPDIR:-/var/tmp}/dstzfslist.$$
+
+usage() {
+  echo "# $0 [-k ssh_key] [-R [-x <file>]] [-B] [-u] [-U] [-I [-m <strftime format>]]"
+  echo "         [-t <command>] [-o \"transport send opts\"] [-O \"transport recv opts\"]"
+  echo "         [-b <snapshot>] [-s] [-S] <SRCVOL>[@host] <DSTVOL>[@host]"
+  echo "      -k ssh_key: use this ssk private key for remote commands - MANDATORY if opearating remotly"
+  echo "      -R: use 'zfs send -R' and snapshot -r ('full replication stream', **see zfs(1M) !**)"
+  echo "      -x <file>: exclude zfs volumes matching <file> (with -R)"
+  echo "      -B: Rollback to last common snapshot (zfs receive -F)"
+  echo "      -u: do not mount received volume(s) on destination (usefull for 'full replication stream' backups !)"
+  echo "      -U: safe mountpoints (backed up to orig:mountpoint if outside of destination"
+  echo "      -z: replace safe mountpoints (using orig:mountpoint if exists)"
+  echo "      -C: create missing destination volume (or let 'zfs receive -F' create it)"
+  echo "      -c /mountpoint: specify mountpoint for created volume"
+  echo "      -I: use 'zfs send -I' instead of 'send -i' (sends all intermediary snapshots - zfs(1M))"
+  echo "          WARNING: if source has 'daily.0' names (REnamed snapshots)"
+  echo "          you HAVE to use -R (AND understand what it does)"
+  echo "      -m cmd: strftime format of a snapshot to be created before sync (to be used with -I)"
+  echo "          snapshot will be destroyed on source after sync"
+  echo "      -t <command>: use 'command' to send data between hosts," 
+  echo "          otherwise ssh is used (CPU/speed vs security)"
+  echo "      TODO: make this work without terminal (eg: cron) \!\!\!"
+  echo "      -o \"transport opts\": specify options for transport server - (source)"
+  echo "      -O \"transport opts\": specify options for transport client - (destination)"
+  echo "      -s: avoid deleting old sync snapshots on source after incremental transfer"
+  echo "      -S: avoid deleting old sync snapshots on destination after incremental transfer"
+  echo "      -T: use a temporary 'known_hosts' and skip ssh key check (restauration case)"
+  echo "      -b SNAP: specify the snapshot to be send instead of creating a new one (add -TBzs to restore)"
+  echo "      -l (facility|none): syslog with defined facility instead on user (local0, ...)"
+  echo "      -H SHORTNAME override MYNAME (defaults to $(uname -s))"
+  echo "      -j: relax source snapshot regex (in case dst/src have changed, or 'After-Murphy' emergency)"
+  echo "      -v: verbose (-vv to debug)"
+  echo "      -n: do not launch write command for real (display them)"
+  echo
+  echo " <SRCVOL> can be given as its mountpoint, as long as it's mounted on source"
+  echo " If there is no volume in <DSTVOL>, the volume name <SRCVOL> will be used as destination volume too"
+  echo " If you use a distant destination, destination host must be able to resolve and connect $MYNAME"
+  echo "   (or use -H hostname to specify this host's name for him)"
+  exit 0
+}
+
+shortusage() {
+  echo "usage: $0 [OPTIONS] [-k ssh_key] <SRCVOL>[@host] <DSTVOL>[@host]"
+  echo "  $0 -k /root/.ssh/id_rsa_zfs zpool/myvol zpool/hisvol@destination.example.com"
+  echo "      will do a single volume sync (incremental if not the first)"
+  echo "  $0 -k /root/.ssh/id_rsa_zfs -R -uU -I -m 'GMT-%Y%m%d-%H%M%S' zpool@myserver zdata/sav/myserver"
+  echo "      will make a full recursive (-R) backup of myserver with history snapshots (-I -m)"
+  echo "      and will protect the backup machine mountpoints (disable mountpoints outside /sav/myserver)"
+  echo "  $0 -k /root/.ssh/id_rsa_restore -T -RBsz -b GMT-20140115-08h15m61s zdata/sav/myserver@backuphost zroot"
+  echo "      will restore backup from backuphost:zdata/sav/myserver@GMT-20140115-08h15m61s to zroot pool"
+  echo "      (for use in mfsbsd live-system)"
+  echo "  $0 -h for full doc"
+  exit 0
+}
+
+ORIGARGS=$@
+while getopts IRk:t:sSo:O:H:hCc:nuUzTb:ax:Bm:l:jv option
+do
+  case $option in
+    I)
+      INCOPT="-I"
+    ;;
+    R)
+      SENDOPT="-R"
+      RECURSE="YES_RECURSE"
+#      DOROLLBACK="LOOSELY"
+    ;;
+    B)
+      RECVOPT='-F'
+      #DOROLLBACK='YES_ROLLBACK'
+      #ROLLBACKOPT='-Rf'
+    ;;
+    u)
+      NODSTMOUNT="YES_NODSTMOUNTS"
+    ;;
+    U)
+      CORRECTMOUNTS="YES_CORRECTMOUNTS"
+    ;;
+    C)
+      CREATEDEST="YES_CREATEDEST"
+    ;;
+    c)
+      CREATEMOUNTPOINT=$OPTARG
+    ;;
+    k)
+      SSHKEY=$OPTARG
+    ;;
+    t)
+      TRANSPORT_CMD=$OPTARG
+    ;;
+    T)
+      TEMPSSH="YES_TEMPSSH"
+    ;;
+    s)
+      KEEPSRCSNAPS="YES_KEEPSRCSNAPS"
+    ;;
+    S)
+      KEEPDSTSNAPS="YES_KEEPDSTSNAPS"
+    ;;
+    m)
+      SRCPRESNAPFORMAT=$OPTARG
+    ;;
+    o)
+      TRANSPORT_SRC_OPTS=$OPTARG
+    ;;
+    O)
+      TRANSPORT_DST_OPTS=$OPTARG
+    ;;
+    H)
+      MYNAME=$OPTARG
+    ;;
+    n)
+      JUSTFORFUN="YES_JUSTFORFUN"
+    ;;
+    x)
+      if [ -f $OPTARG ]; then
+        EXCLUDEFILE=$OPTARG
+      else
+        echo "-x $OPTARG but $OPTARG doen't exist ... ignoring" >&2
+      fi
+    ;;
+    b)
+      NEWSNAP=$OPTARG
+    ;;
+    z)
+      DSTREMOUNTORIG="YES_DSTREMOUNTORIG"
+    ;;
+    l)
+      SYSLOG_ID=$OPTARG
+    ;;
+    j)
+      RELAXSNAPREGEX="YES_RELAXSNAPREGEX"
+    ;;
+    v)
+      VERBOSE=$(( $VERBOSE + 1 ))
+      if [ $VERBOSE -gt 1 ]; then
+        GROSDEBUG="YES_GROSDEBUG"
+      fi
+    ;;
+    h)
+      usage
+    ;;
+    *)
+      shortusage
+    ;;
+  esac
+done
+
+# shift getopt args from ARGV
+shift $(expr $OPTIND - 1)
+
+erreur() {
+  case $1 in
+    [0-9])
+      ret=$1
+      shift
+    ;;
+  esac
+  echo $* 1>&2
+  if [ ! -z "$SYSLOG_ID" ] && [ "$SYSLOG_ID" != "none" ]; then
+    logger -p ${SYSLOG_ID}.error -t "${0##*/}["$$"]" -- $@
+  fi
+  exit ${ret:-1}
+}
+
+inform() {
+  if [ ! -z "$TERM" -a -z "$QUIET" ] || [ $VERBOSE -gt 0 ]; then
+    echo "$(date +%Y%m%d-%H:%M:%S) ${0##*/}: " $*
+  fi
+  if [ ! -z "$SYSLOG_ID" ] && [ "$SYSLOG_ID" != "none" ]; then
+    logger -p ${SYSLOG_ID}.info -t "${0##*/}["$$"]" -- $@
+  fi
+}
+
+warne() {
+  inform $@ >&2
+}
+
+debug() {
+  if [ $VERBOSE -ge 2 ]; then
+    inform $@
+  fi
+}
+
+missingvol() {
+  erreur "Volume $1 doesn't exist on "${2:-"localhost"}"." "you have to create the volume before (or use -C)"
+}
+
+has_excludes() {
+  test -s "$EXCLUDEFILE" || return 1
+  # excludes as zfs path
+  grep '^'$1'/.*' $EXCLUDEFILE && r=0
+  # excludes as unix path
+  for efs in $(src_zfs_list | grep '^'$1'/[^@]*!' | cut -d'!' -f2 | sort); do 
+    grep "^$efs$" $EXCLUDEFILE && r=0
+  done
+  return ${r:-1}
+}
+
+is_excluded() {
+  test -s "$EXCLUDEFILE" || return 1
+  for excluded in $(grep -v '^#' $EXCLUDEFILE | grep -v '^[[:space:]]*$' | sed 's@/@\\/@g; s@\.@\\.@g;'); do
+    # excludes as unix path => translate to zfs path
+    expr "$excluded" : "/*" > /dev/null && excluded=$(src_zfs_list | grep '^[^!]*!'$1'!' | cut -d'!' -f1)
+    [ -z "$excluded" ] && return 1
+    expr "$1" : "${excluded}" > /dev/null && return 0
+  done
+  return 1
+}
+
+dst_run() {
+  if [ -t 0 ]; then
+    $dstcmd "$@"
+  else
+    $dstcmd "$@"
+  fi
+}
+
+src_run() {
+  if [ -t 0 ]; then
+    $srccmd $@
+  else
+    $srccmd $@
+  fi
+}
+
+src_zfs_list() {
+  if [ ! -f "$SRCZFSLIST" ]; then
+    # WARNING: there are TABs in next line !
+    $srcrocmd "zfs list -H -t all -oname,mountpoint,lastbackup:${DSTSNAPHOST:-$MYNAME} -S creation ${LIMIT_RECURSION:+-d1} -r $SRCVOL | sed 's/	/!/g'" > $SRCZFSLIST
+    $srcrocmd "zfs get ${RECURSE:+-r} -Hp -t filesystem -oname,value,source mountpoint $SRCVOL | sed 's/	/\!/g'" > $SRCZFSLIST.mounts
+  fi
+  cat $SRCZFSLIST
+}
+
+dst_zfs_list() {
+  if [ ! -f "$DSTZFSLIST" ]; then
+    # WARNING: there are TABs in next line !
+    $dstrocmd "zfs list -H -t filesystem,volume -oname,mountpoint,orig:mountpoint -S creation ${RECURSE:+-r} $DSTVOL 2>/dev/null | sed 's/	/\!/g'; zfs list -H -t snapshot -oname,mountpoint,orig:mountpoint -S creation ${LIMIT_RECURSION:+-d1} -r $DSTVOL 2>/dev/null | sed 's/	/\!/g'" > $DSTZFSLIST
+  fi
+  cat $DSTZFSLIST
+}
+
+# args: dstvol
+make_source_snapshot() {
+  DELSNAPS=""
+  # build list of snapshots to be deleted before
+  if has_excludes ${1%@*} > /dev/null; then
+    for fs in $(src_zfs_list | cut -d'!' -f1 | grep '^'${1%@*}'/[^@]*$'); do
+      if is_excluded $fs; then
+        if [ "$RECURSE" != "YES_RECURSE" ] || ! echo $DELSNAPS | grep -q ' '$fs' '; then
+          DELSNAPS=$DELSNAPS"${fs}@${1#*@} "
+        fi
+      else
+        for sfs in $(has_excludes $fs | sort -r); do
+          DELSNAPS=$DELSNAPS"$sfs@${1#*@} "
+        done
+      fi
+    done
+  fi
+  src_run "zfs snapshot ${RECURSE:+-r} $SRCVOL@${1#*@}; ${DELSNAPS:+for i in $DELSNAPS; do zfs destroy -r \$i; done}"
+  rm $SRCZFSLIST
+  src_zfs_list > /dev/null
+}
+
+# args: srcvol dstvol
+# set LASTCOMMONSNAP if not set
+get_last_common_snapshot() {
+  if [ ! -z "$LASTCOMMONSNAP" ]; then
+    return 0
+  fi
+  # s'il est stocke dans le ZFS distant, on fait confiance
+  test1=$(src_zfs_list | grep -E '^'${SRCVOL}'!.*![a-zA-Z0-9]+[-a-zA-Z0-9]+' | cut -d'!' -f3)
+  if [ ! -z "$test1" ]; then
+    dst_zfs_list | grep -Eq '^'${DSTVOL}'@'${test1}'!' && lastknownsnap=${test1}
+  fi
+  if [ ! -z $RELAXSNAPREGEX ]; then
+    SNAPCANDIDATES=$(dst_zfs_list | cut -d'!' -f1 | grep -E '^'${DSTVOL}'@.*$')
+  else
+    SNAPCANDIDATES=$(dst_zfs_list | cut -d'!' -f1 | grep -E '^'${DSTVOL}'@'${SRCSNAPHOST:-$MYNAME}'-'${DSTSEARCHHOST:-$MYNAME}'-[[:digit:]]{8}-[[:digit:]]{2}h[[:digit:]]{2}m[[:digit:]]{2}s$')
+  fi
+  for snap in ${DSTVOL}@$lastknownsnap $SNAPCANDIDATES; do
+    if src_zfs_list | cut -d'!' -f1 | grep -Eq '^'${SRCVOL}'@'${snap#*@}'$'; then
+      snapcandidate=${snap#*@}
+      # search for snapcandidate on all existing subvolumes on dst (but excluded or nor part of SRCVOL)
+      for dstfs in $(dst_zfs_list | cut -d'!' -f1 | grep '^'${DSTVOL}'/[^@]*$'); do
+        if ! dst_zfs_list | cut -d'!' -f1 | grep -q '^'$dstfs'@'${snapcandidate}'$'; then
+          if is_excluded ${SRCVOL}${dstfs#$DSTVOL}; then
+            warne "excluded fs existing on dest: $dstfs : delete ?"
+#            dst_cmd "zfs destroy -r $dstfs"
+            rm $DSTZFSLIST
+          elif src_zfs_list | cut -d'!' -f1 | sed 's|'${SRCVOL}'|'${DSTVOL}'|' | grep -q '^'$dstfs; then
+            # this volume is part of $SRCVOL :(
+            warne "snapshot ${snapcandidate} missing on $dstfs"
+            snapcandidate=""
+            break
+          fi
+        fi
+      done
+      [ -z "$snapcandidate" ] && continue
+      # search for snapcandidate all subvolumes *but new or excluded* on src
+      for fs in $(src_zfs_list | cut -d'!' -f1 | grep -E '^'${SRCVOL}'[^@]*$'); do
+        # if the snapshot doesn't exists on a sub-volume on source...
+        if ! src_zfs_list | cut -d'!' -f1 | grep -q '^'$fs'@'${snapcandidate}'$' && ! is_excluded $fs; then
+          # ..check that the volume doesn't exist on ${DSTVOL} (new vol on $SRC), 
+          # otherwise this snap wouldn't work
+          if dst_zfs_list | cut -d'!' -f1 | grep -q '^'${DSTVOL}${fs#${SRCVOL}}'!'; then
+            debug "$snapcandidate non valide (manque sur ${DSTVOL}${fs#${SRCVOL}})"
+            snapcandidate=""
+            break
+          fi
+        fi
+      done
+      # get it !
+      if [ ! -z "$snapcandidate" ]; then
+        LASTCOMMONSNAP=$snapcandidate
+        break
+      fi
+    fi
+  done
+  if [ -z "$LASTCOMMONSNAP" ]; then
+    return 1
+  fi
+}
+
+rollback_to_last_common_snapshot() {
+  inform "Rollback to ${DSTVOL}@${LASTCOMMONSNAP}${DSTHOST:+ on $DSTHOST}"
+  dst_run "zfs rollback $ROLLBACKOPT ${DSTVOL}@${LASTCOMMONSNAP}"
+}
+
+# sanity check args
+if [ ! -z "$SRCPRESNAPFORMAT" ] && [ "$INCOPT" != "-I" ]; then
+  warne "$0: -m needs -I to get the snapshot"
+  exec $0 -0
+fi
+if [ ! -z "$TRANSPORT_CMD" ] && [ -z "$TRANSPORT_SRC_OPTS" -o -z "$TRANSPORT_DST_OPTS" ]; then
+  warne "-t $TRANSPORT_CMD may need args with -o and -O"
+  exec $0 -0
+fi
+if [ ! -z "$EXCLUDEFILE" ]; then
+  if [ ! -f "$EXCLUDEFILE" ]; then
+    erreur "$EXCLUDEFILE doesn't exist"
+  fi
+  if [ "$RECURSE" != "YES_RECURSE" ]; then
+    erreur "-x <file> only makes sense with -R"
+  fi
+fi
+if [ "$RECURSE" != "YES_RECURSE" ]; then
+  LIMIT_RECURSION="YES_LIMIT"
+fi
+
+#TRANSPORTCMD=${TRANSPORTCMD:-""}
+
+### check args
+if [ $# -eq 2 ]; then
+  SRC=$1
+  DST=$2
+else
+  shortusage
+fi
+
+### lock myself if not already
+if [ ! -n "$ZFSSYNCLOCKED" ]; then
+  LOCKFILE=${TMPDIR:-/var/tmp}/LCK.$(echo "$SRC $DST" | sed 's/[^-a-zA-Z0-9_]/_/g')
+  export ZFSSYNCLOCKED=$LOCKFILE
+  exec lockf -t 0 $LOCKFILE /bin/sh -f ${GROSDEBUG:+-x} $0 $ORIGARGS
+fi
+
+TBEGIN=$(date +%s)
+
+SYSLOG_ID=${SYSLOG_ID:-user}
+
+####################
+### process args ###
+####################
+SSHOPTS="-T"${SSHKEY:+" -i $SSHKEY"}${TEMPSSH:+" -oUserKnownHostsFile=${TMPDIR:-/tmp}/kkk -oCheckHostIP=no"}${SSH_CIPHERS:+" -c $SSH_CIPHERS"}
+
+# determine source and dest hosts, volumes,...
+SRCHOST=""
+DSTHOST=""
+SRCVOL=${SRC%%@*}
+DSTVOL=${DST%%@*}
+
+srccmd="eval"
+dstcmd="eval"
+
+if echo "$SRC" | grep '@' >/dev/null; then
+  SRCHOST=${SRC##*@}
+  SRCSNAPHOST=${SRCHOST%%.*}
+  srccmd="ssh ${SSHOPTS} ${SRCHOST}"
+  ZSRCVOL=$(src_run "zfs list -H -o name $SRCVOL")
+  test ! -z "$ZSRCVOL" || erreur "Impossible de se connecter a ${SRCHOST} ou de determiner la source zfs pour $SRCVOL"
+  SRCVOL=$ZSRCVOL
+fi
+
+if echo "$DST" | grep '@' >/dev/null; then
+  DSTHOST=${DST##*@}
+  DSTSNAPHOST=${DSTHOST%%.*}
+  DSTSEARCHHOST=${CHANGEDSTHOST:-$DSTSNAPHOST}
+  dstcmd="ssh ${SSHOPTS} ${DSTHOST}"
+  dst_run "echo ok" | grep ok >/dev/null || erreur "Impossible de se connecter a ${DSTHOST}"
+fi
+
+if [ -n "$SRCHOST" -o -n "$DSTHOST" ] && [ -z "$SSHKEY" ] && [ -z "$SSH_AUTH_SOCK" ]; then
+  erreur "Missing ssh key (-k or agent)"
+fi
+
+srcrocmd=$srccmd
+dstrocmd=$dstcmd
+
+if [ ! -z "$JUSTFORFUN" ]; then
+  inform "Running just for fun, don't worry :)"
+  srccmd='echo DID NOT LAUNCH: # '$srccmd
+  dstcmd='echo DID NOT LAUNCH: # '$dstcmd
+fi
+
+# nc|mbuffer|...
+if [ ! -z "$TRANSPORT_CMD" ]; then
+  TRANSPORT_SRC_CMD=$($srcrocmd "which $TRANSPORT_CMD | fgrep -v 'not found'")
+  [ -z "$TRANSPORT_SRC_CMD" ] && erreur "$TRANSPORT_CMD introuvable ${SRCHOST:+sur $SRCHOST}"
+  TRANSPORT_DST_CMD=$($srcrocmd "which $TRANSPORT_CMD | fgrep -v 'not found'")
+  [ -z "$TRANSPORT_DST_CMD" ] && erreur "$TRANSPORT_CMD introuvable ${DSTHOST:+sur $DSTHOST}"
+else
+  # try mbuffer
+  MBUFFER_SRC_CMD=$($srcrocmd "which mbuffer | fgrep -v 'not found'")
+  [ ! -z "$MBUFFER_SRC_CMD" ] && MBUFFER_SRC_CMD=$MBUFFER_SRC_CMD" -m 64M -q"
+  MBUFFER_DST_CMD=$($dstrocmd "which mbuffer | fgrep -v 'not found'")
+  [ ! -z "$MBUFFER_DST_CMD" ] && MBUFFER_DST_CMD=$MBUFFER_DST_CMD" -m 1G -q"
+fi
+
+# check and resolve source
+if ! src_zfs_list | cut -d'!' -f1 | grep -q '^'${SRCVOL}'$'; then
+  if src_zfs_list | cut -d'!' -f2 | grep -q '^'${SRCVOL}'$'; then
+    SRCVOL=$(src_zfs_list | fgrep -q '!'${SRCVOL}'!' | cut -d'!' -f1)
+  else
+    erreur "Le volume ${SRC} n'existe pas"
+  fi
+fi
+
+DSTMOUNTBASE=$(dst_zfs_list | grep '^'${DSTVOL}'!' | cut -d'!' -f2 2>/dev/null)
+SRCMOUNTBASE=$(src_zfs_list | grep '^'${SRCVOL}'!' | cut -d'!' -f2 2>/dev/null)
+
+# create destination if needed && -C
+if [ -z "$DSTMOUNTBASE" ]; then
+  if [ "$CREATEDEST" = "YES_CREATEDEST" ]; then
+    RECVOPT='-F'
+    cmd="zfs create"$($srcrocmd "zfs get -H -oproperty,value,source all ${SRCVOL} | grep 'local$'" | while read prop val source; do
+        if [ "$prop" = "mountpoint" -a "$val" != "none" -a "$val" != "legacy" ]; then
+          echo -n " -o orig:mountpoint=$val";
+        else
+          echo -n " -o $prop=\"$val\"";
+        fi
+      done)${CREATEMOUNTPOINT:+" -o mountpoint=$CREATEMOUNTPOINT"}
+
+    DSTMOUNTBASE=${CREATEMOUNTPOINT:-$DSTMOUNTBASE}
+    rm $DSTZFSLIST
+    if [ -z "$DSTMOUNTBASE" ]; then
+      PARENTDEST=$($dstrocmd "zfs list -H -omountpoint ${DSTVOL%/*}" | grep -Ev '(none|legacy)')
+      [ -z "$PARENTDEST" ] && erreur 5 "Impossible de determiner le repertoire de montage"
+      DSTMOUNTBASE=${PARENTDEST}/${DSTVOL##*/}
+    fi
+
+    dst_run "$cmd ${DSTVOL}" || missingvol ${DST:+$DST}
+  else
+    erreur 6 "La destination (${DSTVOL}) n'existe pas et pas -C :("
+  fi
+fi
+
+# check DSTMOUNTBASE must exist
+echo $DSTMOUNTBASE | grep -q '^/[a-zA-Z0-9]' || echo $DSTMOUNTBASE | grep '\(none\|legacy\)' || erreur "DSTMOUNTBASE mal defini ($DSTMOUNTBASE)"
+
+# check for dangerous new fixed mountpoints on source for new volumes
+for fs in $(grep '!\(local\|received\)$' $SRCZFSLIST.mounts | cut -d'!' -f1 | sed 's|'${SRCVOL}'|'${DSTVOL}'|'); do
+  dst_zfs_list | grep '^'$fs'!' | cut -d'!' -f2 | while read dstmountpoint; do
+    if ! expr "$dstmountpoint" : "$DSTMOUNTBASE" > /dev/null && [ -z "$CORRECTMOUNTS" -a -z "$DSTREMOUNTORIG" ]; then
+      erreur "DANGEROUS: some mountpoints out of $DSTMOUNTBASE (and no -U !)"
+    fi
+  done
+done
+
+# check for dangerous mountpoints on dest
+if [ -n "$(dst_zfs_list | grep -Ev '^'${DSTVOL}'.*!(none|legacy|-)!' | grep -qv '!'${DSTMOUNTBASE}'!')" ]; then
+  if [ -z "$CORRECTMOUNTS" -a -z "$DSTREMOUNTORIG" ]; then
+    erreur "WARNING: certains points de montage sont hors de $DSTMOUNTBASE (et -U absent) : $(dst_zfs_list | grep -Ev '^'${DSTVOL}'.*!(none|legacy|-)!' | grep -v '!'${DSTMOUNTBASE} | sed 's/^\(.*\)!\(.*\)!.*$/\1 -> \2/')"
+  fi
+fi
+
+# locate last snapshot (if any)
+if ! get_last_common_snapshot && dst_zfs_list | grep -q '^'${DSTVOL}'@'; then
+  # If no common snapshot AND DSTVOL has snapshots, zfs receive would fail.
+  erreur 7 "ERREUR: des snapshots existent dans ${DSTVOL} et aucun snapshot commun existant n'a ete trouve... Re-essayez avec -j ou supprimez tout ${DSTVOL}"
+fi
+
+TCHECKSOK=$(date +%s)
+TCHECKS=$(($TCHECKSOK - $TBEGIN))
+
+if [ ! -z "$LASTCOMMONSNAP" -a "$DOROLLBACK" = "YES_ROLLBACK" ]; then
+  rollback_to_last_common_snapshot || erreur "rollback impossible"
+fi
+
+# pre-snapshot on source if -m
+if [ ! -z "$SRCPRESNAPFORMAT" ]; then
+  PRESNAP=${SRCVOL}@$(TZ=UTC date +$SRCPRESNAPFORMAT)
+  make_source_snapshot ${PRESNAP} && SRCSNAPSTODEL=$SRCSNAPSTODEL" "$PRESNAP
+fi
+
+# create source snapshot if ! -b
+if [ -z "$NEWSNAP" ]; then
+  # create snapshot on source (this one is quick)
+  NEWSNAP=${SRCSNAPHOST:-$MYNAME}'-'${DSTHOST:-$MYNAME}'-'$(date +%Y%m%d-%Hh%Mm%Ss)
+  # workaround: si on demande un incremental trop vite, on triche d'une minute
+  if [ "$NEWSNAP" = "$LASTCOMMONSNAP" ]; then
+    NEWSNAP=${SRCSNAPHOST:-$MYNAME}'-'${DSTSNAPHOST:-$MYNAME}'-'$(date -v +1S +%Y%m%d-%Hh%Mm%Ss)
+  fi
+  inform "Create source snapshot ${SRCHOST:+"$SRCHOST:"}${SRCVOL}@${NEWSNAP}"
+  make_source_snapshot ${SRCVOL}@${NEWSNAP}
+fi
+
+TMKSNAPOK=$(date +%s)
+TMKSNAP=$(($TMKSNAPOK - $TCHECKSOK))
+
+DONE=0
+DSTSNAPSTODEL=""
+
+SRC_SEND_CMD="zfs send ${SENDOPT} ${LASTCOMMONSNAP:+$INCOPT $LASTCOMMONSNAP} ${SRCVOL}@${NEWSNAP}"
+DST_RECV_CMD="zfs receive -v ${RECVOPT}${NODSTMOUNT:+ -u} ${DSTVOL}"
+inform "Sending ${SRCVOL}@${NEWSNAP}${MBUFFER_SRC_CMD:+ with mbuffer}${TRANSPORT_CMD:+ via TRANSPORT_CMD}"
+if [ ! -z "$TRANSPORT_CMD" ]; then
+  src_run "$SRC_SEND_CMD | $TRANSPORT_SRC_CMD $TRANSPORT_SRC_OPTS" &
+  sleep 1
+  dst_run "$TRANSPORT_DST_CMD $TRANSPORT_DST_OPTS | $DST_RECV_CMD"
+  wait
+  RET=$?
+else
+  src_run "$SRC_SEND_CMD ${MBUFFER_SRC_CMD:+ | $MBUFFER_SRC_CMD}" | dst_run "${MBUFFER_DST_CMD:+$MBUFFER_DST_CMD | }$DST_RECV_CMD"
+  RET=$?
+fi
+if [ $RET -ne 0 ]; then
+  warne "Error transfering from ${SRCHOST:+"$SRCHOST:"}${SRCVOL}@${NEWSNAP} to ${DSTHOST:+"$DSTHOST:"}${DSTVOL}${LASTCOMMONSNAP:+" (inc. based on @$LASTCOMMONSNAP)"}. zfs returns $RET"
+  warne "  send command $SRC_SEND_CMD"
+  warne "  receive command $DST_RECV_CMD"
+  warne "you may retry with -B (rollback forced) and/or -j (loosy snapshot search)"
+  SRCSNAPSTODEL=$SRCSNAPSTODEL${NEWSNAP:+" ${SRCVOL}@${NEWSNAP}"}
+  DSTSNAPSTODEL=$DSTSNAPSTODEL${NEWSNAP:+" ${DSTVOL}@${NEWSNAP}"}
+else
+  inform "Transfer ok :)"
+  [ -z "$KEEPSRCSNAPS" ] && SRCSNAPSTODEL=$SRCSNAPSTODEL${LASTCOMMONSNAP:+" ${SRCVOL}@${LASTCOMMONSNAP}"}
+  [ -z "$KEEPDSTSNAPS" ] && DSTSNAPSTODEL=$DSTSNAPSTODEL${LASTCOMMONSNAP:+" ${DSTVOL}@${LASTCOMMONSNAP}"}
+fi
+TTRANSFEROK=$(date +%s)
+TTRANSFER=$(($TTRANSFEROK - $TMKSNAPOK))
+
+# correction des points de montage
+if [ -z "$DSTREMOUNTORIG" -a ! -z "$CORRECTMOUNTS" ]; then
+  inform "Enregistrement+modification des points de montage originaux sur ${DSTVOL}"
+  dst_run 'zfs get -Hp -r -t filesystem -oname,value,source mountpoint '${DSTVOL}' | sort -r | grep 'received$' | while read vol val src; do
+    if [ "$val" != "legacy" ] && [ "$val" != "none" ]; then
+      zfs set mountpoint=${DSTMOUNTBASE}${val#$SRCMOUNTBASE} $vol
+      zfs set orig:mountpoint=$val $vol
+    fi
+  done'
+fi
+
+# si restauration, on remet les points de montage originaux
+if [ ! -z "$DSTREMOUNTORIG" ]; then
+  inform "Restauration des points de montage originaux sur ${DSTVOL}"
+  dst_run 'zfs get -Hp -t filesystem -r -oname,value,source orig:mountpoint '${DSTVOL}' | sort -r | while read vol val src; do
+    if [ "$src" = "received" -a "$val" != "-" ]; then
+      zfs set mountpoint=$val $vol
+      zfs inherit orig:mountpoint $vol
+    fi
+  done'
+fi
+
+TPOSTCHECKSOK=$(date +%s)
+TPOSTCHECKS=$(($TPOSTCHECKSOK - $TTRANSFEROK))
+
+if [ -z "$KEEPSRCSNAPS" -a $RET -eq 0 ]; then
+  SRCSNAPSTODEL=$SRCSNAPSTODEL$(src_zfs_list | cut -d'!' -f1 | \
+    grep -E '@'${SRCSNAPHOST:-$MYNAME}'-'${DSTSEARCHHOST:-$MYNAME}'-[[:digit:]]{8}-[[:digit:]]{2}h[[:digit:]]{2}m[[:digit:]]{2}s$' | \
+    grep -Fv ${LASTCOMMONSNAP:-"THISCANNOTBEASNAPSHOTNAME"} | fgrep -v ${NEWSNAP} | \
+    while read s; do if ! is_excluded ${s%@*} && [ "${s#*@}" != "$LASTCOMMONSNAP" ] && [ "${s#*@}" != "$NEWSNAP" ]; then echo " $s"; fi; done)
+fi
+if [ -z "$KEEPDSTSNAPS" -a $RET -eq 0 ]; then
+  DSTSNAPSTODEL=$DSTSNAPSTODEL$(dst_zfs_list | cut -d'!' -f1 | \
+    grep -E '@'${SRCSNAPHOST:-$MYNAME}'-'${DSTSEARCHHOST:-$MYNAME}'-[[:digit:]]{8}-[[:digit:]]{2}h[[:digit:]]{2}m[[:digit:]]{2}s$' | \
+    fgrep -v ${LASTCOMMONSNAP:-"THISCANNOTBEASNAPSHOTNAME"} | fgrep -v ${NEWSNAP} | \
+    while read s; do if ! is_excluded ${s%@*} && [ "${s#*@}" != "$LASTCOMMONSNAP" ] && [ "${s#*@}" != "$NEWSNAP" ] && src_zfs_list | ( v=${s%@*}; grep -q '^'${SRCVOL}${v#$DSTVOL}'!'); then echo " $s"; fi; done)
+fi
+if [ ! -z "$SRCSNAPSTODEL" ]; then
+  inform "Cleaning snapshots${SRCHOST:+ on $SRCHOST}: $SRCSNAPSTODEL" 
+  src_run 'for snap in '$SRCSNAPSTODEL'; do zfs destroy '${RECURSE:+-r}' -d $snap; done'
+fi
+if [ ! -z "$DSTSNAPSTODEL" ]; then
+  inform "Cleaning snapshots${DSTHOST:+ on $DSTHOST}: $DSTSNAPSTODEL" 
+  dst_run 'for snap in '$DSTSNAPSTODEL'; do zfs destroy '${RECURSE:+-r}' -d $snap; done'
+fi
+
+# write newsnap name on lastbackup:$MYNAME property if ok
+if [ $RET -eq 0 ]; then
+  src_run "zfs set lastbackup:${DSTSNAPHOST:-$MYNAME}=${NEWSNAP} ${SRCVOL}"
+fi
+rm -f $SRCZFSLIST $SRCZFSLIST.mounts $DSTZFSLIST
+
+TCLEANUPOK=$(date +%s)
+TCLEANUP=$(($TCLEANUPOK - $TPOSTCHECKSOK))
+
+TEND=$(($TCLEANUPOK - $TBEGIN))
+inform "${0##*/} end: ${TCHECKS}s checking, ${TMKSNAP}s snapshot, ${TTRANSFER}s transfer, ${TPOSTCHECKS}s checking, ${TCLEANUP}s cleanup, ${TEND}s total."
+return $RET

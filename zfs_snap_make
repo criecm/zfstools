@@ -1,0 +1,71 @@
+#!/bin/sh
+# Creation de snapshots zfs au format @GMT-%Y.%m.%d-%H.%M.%S
+#
+# pour renommer des snapshots existants:
+# for snap in $(zfs list -t snapshot -H -o name -r ZLIP-ftp/sav | grep '@\(daily\|weekly\|nightly\|monthly\)'); do
+#   LOCALDATE=$(date -j -f"%a %b %e %k:%M %Y" +"%Y.%m.%d-%H.%M.%S %z" "$(zfs list -t snapshot -H -o creation $snap)")
+#   GMTDATE=$(TZ=GMT date -j -f"%Y.%m.%d-%H.%M.%S %z" +%Z-%Y.%m.%d-%H.%M.%S $LOCALDATE)
+#   echo "$LOCALDATE -> $GMTDATE"
+#   echo "zfs rename $snap ${snap%%@*}@$GMTDATE # LOCALDATE: $LOCALDATE"
+# done
+
+usage() {
+  echo "usage: $0 [-r] [-s UTC unix timestamp] [-m maxsnaps] volume|dir"
+  exit 0
+}
+
+VERBOSE=1
+
+while getopts rs:m:qvh option
+do
+  case $option in
+    m)
+      MAXSNAPS=$OPTARG
+    ;;
+    r)
+      ZFSSNAPRECURSE="-r"
+    ;;
+    s)
+      SNAPNAME=$(TZ=GMT date -j -f%s +GMT-%Y.%m.%d-%H.%M.%S $OPTARG)
+    ;;
+    q)
+      VERBOSE=0
+    ;;
+    v)
+      VERBOSE=2
+    ;;
+    h)
+      usage
+    ;;
+  esac
+done
+# shift getopt args from ARGV
+shift $(expr $OPTIND - 1)
+
+if [ $# -lt 1 ]; then
+  usage
+fi
+
+for arg in $*; do
+  vol=$(zfs list -H -oname $arg)
+  if [ -z "$vol" ]; then
+    echo "Pas de volume trouve pour $arg" >&2
+    continue
+  fi
+  if /sbin/zfs list -H -t filesystem,volume $vol > /dev/null; then
+    if [ -z "$SNAPNAME" ]; then
+      SNAPNAME=${SNAPNAME:-$(TZ=GMT date +GMT-%Y.%m.%d-%H.%M.%S)}
+    fi
+    /sbin/zfs snapshot ${ZFSSNAPRECURSE:+"-r"} $vol@$SNAPNAME
+    [ $VERBOSE -ge 1 ] && echo "$vol@$SNAPNAME"
+  fi
+done
+
+if [ ${MAXSNAPS:-0} -gt 0 ]; then
+  for snap in $(/sbin/zfs list -r -H -o name -t snapshot $vol | grep $vol'@GMT-2' | sort -rn); do
+    MAXSNAPS=$(($MAXSNAPS - 1))
+    if [ $MAXSNAPS -lt 0 ]; then
+      /sbin/zfs destroy ${ZFSSNAPRECURSE:+"-r"} -d $snap
+    fi
+  done
+fi
