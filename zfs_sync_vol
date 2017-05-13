@@ -26,7 +26,7 @@ RECVOPT=${RECVOPT:-""}
 JUSTFORFUN=${JUSTFORFUN:-""}
 MYNAME=${MYNAME:-$(hostname -s)}
 VERBOSE=${VERBOSE:-0}
-SSH_CIPHERS="arcfour128,arcfour256,arcfour,blowfish-cbc,aes128-cbc,aes128-ctr,cast128-cbc"
+SSH_CIPHERS=${SSH_CIPHERS:-"arcfour128,arcfour256,arcfour,blowfish-cbc,aes128-cbc,aes128-ctr,cast128-cbc"}
 
 SRCZFSLIST=${TMPDIR:-/var/tmp}/srczfslist.$$
 DSTZFSLIST=${TMPDIR:-/var/tmp}/dstzfslist.$$
@@ -457,7 +457,7 @@ else
   MBUFFER_SRC_CMD=$($srcrocmd "which mbuffer | fgrep -v 'not found'")
   [ ! -z "$MBUFFER_SRC_CMD" ] && MBUFFER_SRC_CMD=$MBUFFER_SRC_CMD" -m 64M -q"
   MBUFFER_DST_CMD=$($dstrocmd "which mbuffer | fgrep -v 'not found'")
-  [ ! -z "$MBUFFER_DST_CMD" ] && MBUFFER_DST_CMD=$MBUFFER_DST_CMD" -m 1G -q"
+  [ ! -z "$MBUFFER_DST_CMD" ] && MBUFFER_DST_CMD=$MBUFFER_DST_CMD" -m 64M -q"
 fi
 
 # check and resolve source
@@ -476,23 +476,26 @@ SRCMOUNTBASE=$(src_zfs_list | grep '^'${SRCVOL}'!' | cut -d'!' -f2 2>/dev/null)
 if [ -z "$DSTMOUNTBASE" ]; then
   if [ "$CREATEDEST" = "YES_CREATEDEST" ]; then
     RECVOPT='-F'
-    cmd="zfs create"$($srcrocmd "zfs get -H -oproperty,value,source all ${SRCVOL} | grep 'local$'" | while read prop val source; do
-        if [ "$prop" = "mountpoint" -a "$val" != "none" -a "$val" != "legacy" ]; then
-          echo -n " -o orig:mountpoint=$val";
-        else
-          echo -n " -o $prop=\"$val\"";
-        fi
-      done)${CREATEMOUNTPOINT:+" -o mountpoint=$CREATEMOUNTPOINT"}
+    cmd=""
+    if [ -n "$CREATEMOUNTPOINT" ]; then
+      cmd="zfs create"$($srcrocmd "zfs get -H -oproperty,value,source all ${SRCVOL} | grep 'local$'" | while read prop val source; do
+          if [ "$prop" = "mountpoint" -a "$val" != "none" -a "$val" != "legacy" ]; then
+            echo -n " -o orig:mountpoint=$val";
+          else
+            echo -n " -o $prop=\"$val\"";
+          fi
+        done)${CREATEMOUNTPOINT:+" -o mountpoint=$CREATEMOUNTPOINT"}
+    fi
 
     DSTMOUNTBASE=${CREATEMOUNTPOINT:-$DSTMOUNTBASE}
     rm $DSTZFSLIST
-    if [ -z "$DSTMOUNTBASE" ]; then
+
+    if [ -z "$DSTMOUNTBASE" ] || [ "$DSTMOUNTBASE" = "none" ] || [ "$DSTMOUNTBASE" = "legacy" ]; then
       PARENTDEST=$($dstrocmd "zfs list -H -omountpoint ${DSTVOL%/*}" | grep -Ev '(none|legacy)')
       [ -z "$PARENTDEST" ] && erreur 5 "Impossible de determiner le repertoire de montage"
       DSTMOUNTBASE=${PARENTDEST}/${DSTVOL##*/}
     fi
-
-    dst_run "$cmd ${DSTVOL}" || missingvol ${DST:+$DST}
+    [ -n "$cmd" ] && dst_run "$cmd ${DSTVOL}" || missingvol ${DST:+$DST}
   else
     erreur 6 "La destination (${DSTVOL}) n'existe pas et pas -C :("
   fi
