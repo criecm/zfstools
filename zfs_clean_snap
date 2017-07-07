@@ -77,7 +77,7 @@ debug() {
 }
 error_with_logs() {
   say $@;
-  echo "zfs_clean_snap $EXPR $VOL: $*" | /usr/local/bin/mutt -s "Erreur de zfs_clean_snap sur $(hostname)" $(for log in $TODELLIST $CHECKLIST $FULLLIST $WORKLIST; do echo -- "-a $log "; done) sysadm@ec-m.fr
+  echo "zfs_clean_snap $EXPR $VOL: $*" | /usr/local/bin/mutt -s "Erreur de zfs_clean_snap sur $(hostname)" sysadm@ec-m.fr -a $(for log in $TODELLIST $CHECKLIST $FULLLIST $WORKLIST; do echo "$log "; done)
 }
 
 export CLEANSNAP_RECURSE CLEANSNAP_GREP CLEANSNAP_FAKE CLEANSNAP_VERBOSE
@@ -252,10 +252,9 @@ if [ -s $TODELLIST ]; then
     zfs list -t snapshot -o name -r $VOL | grep '^'$VOL'.*@'$GREPSNAP > $WORKLIST
     CHECK=$(cat $CHECKLIST $WORKLIST | sort | uniq -d)
     if [ -n "$CHECK" ]; then
-      error_with_logs "checks: snapshots en trop a la fin: $CHECK"
-    else
-      say "done :)"
+      debug "checks: snapshots en trop a la fin: $CHECK"
     fi
+    say "done :)"
   fi
 fi
 rm $FULLLIST $WORKLIST $TODELLIST $CHECKLIST
