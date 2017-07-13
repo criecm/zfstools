@@ -324,7 +324,7 @@ get_last_common_snapshot() {
           elif src_zfs_list | cut -d'!' -f1 | sed 's|'${SRCVOL}'|'${DSTVOL}'|' | grep -q '^'$dstfs; then
             # this volume is part of $SRCVOL :(
             warne "snapshot ${snapcandidate} missing on $dstfs"
-            snapcandidate=""
+            #snapcandidate=""
             break
           fi
         fi
@@ -477,7 +477,7 @@ if [ -z "$DSTMOUNTBASE" ]; then
   if [ "$CREATEDEST" = "YES_CREATEDEST" ]; then
     RECVOPT='-F'
     cmd=""
-    if [ -n "$CREATEMOUNTPOINT" ]; then
+#    if [ -n "$CREATEMOUNTPOINT" ]; then
       cmd="zfs create"$($srcrocmd "zfs get -H -oproperty,value,source all ${SRCVOL} | grep 'local$'" | while read prop val source; do
           if [ "$prop" = "mountpoint" -a "$val" != "none" -a "$val" != "legacy" ]; then
             echo -n " -o orig:mountpoint=$val";
@@ -485,7 +485,7 @@ if [ -z "$DSTMOUNTBASE" ]; then
             echo -n " -o $prop=\"$val\"";
           fi
         done)${CREATEMOUNTPOINT:+" -o mountpoint=$CREATEMOUNTPOINT"}
-    fi
+#    fi
 
     DSTMOUNTBASE=${CREATEMOUNTPOINT:-$DSTMOUNTBASE}
     rm $DSTZFSLIST
