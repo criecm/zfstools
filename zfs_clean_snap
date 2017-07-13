@@ -51,6 +51,8 @@ if ! ( echo $1 | egrep '^[[:digit:]]+h[[:digit:]]+d[[:digit:]]+w[[:digit:]]+m[[:
 fi
 
 getsnapdate() {
+  ZTIME=$(LC_TIME=C zfs list -H -o creation $1| cut -c 1-21 2>/dev/null)
+  [ -z "$ZTIME" ] && return 1
   LC_TIME=C date -jnu -f '%a %b %e %R %Y' +%s "$(LC_TIME=C zfs list -H -o creation $1| cut -c 1-21)"
 }
 say() {
@@ -138,6 +140,7 @@ cleanupvol() {
       continue
     fi
     ts=$(getsnapdate $name)
+    [ -z "$ts" ] && continue
     KEEPIT=""
     # skip if format doesn't match
     if [ $? -ne 0 ] || [ -z "$ts" ]; then
