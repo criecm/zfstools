@@ -156,7 +156,7 @@ my @order = (
 
 sub do_collect {
     my @params = join(',',( keys %{$properties} ));
-    my $fsget="$zfsexec get -H -p -r -t filesystem,volume @params $zpool";
+    my $fsget="$zfsexec get -H -p -d 2 -r -t filesystem,volume @params $zpool";
 
     foreach my $line (split(/\n/, `$fsget` )) {
         my ($name, $key, $value, undef ) = (split(/\t/,$line));
