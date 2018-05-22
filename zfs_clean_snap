@@ -82,17 +82,18 @@ error_with_logs() {
   echo "zfs_clean_snap $EXPR $VOL: $*" | /usr/local/bin/mutt -s "Erreur de zfs_clean_snap sur $(hostname)" sysadm@ec-m.fr -a $(for log in $TODELLIST $CHECKLIST $FULLLIST $WORKLIST; do echo "$log "; done)
 }
 
-export CLEANSNAP_RECURSE CLEANSNAP_GREP CLEANSNAP_FAKE CLEANSNAP_VERBOSE
+ID=$(echo $2 | sed 's@/@_@g')
+export CLEANSNAP_RECURSE CLEANSNAP_GREP CLEANSNAP_FAKE CLEANSNAP_VERBOSE ID
 
 # lock (not more than one by pool)
 if ! [ "$LOCKED" != "YAISSE" ]; then
-  exec lockf -s -t 1600 /tmp/zfs_clean_snap_${2%%/*}.lock $0 $*
+  exec lockf -s -t 1600 /tmp/zfs_clean_snap_${ID}.lock $0 $*
 fi
 
-TODELLIST=/tmp/zfs_clean_snap_${2%%/*}.todel
-CHECKLIST=/tmp/zfs_clean_snap_${2%%/*}.tocheck
-FULLLIST=/tmp/zfs_clean_snap_${2%%/*}.fullist
-WORKLIST=/tmp/zfs_clean_snap_${2%%/*}.list
+TODELLIST=/tmp/zfs_clean_snap_${ID}.todel
+CHECKLIST=/tmp/zfs_clean_snap_${ID}.tocheck
+FULLLIST=/tmp/zfs_clean_snap_${ID}.fullist
+WORKLIST=/tmp/zfs_clean_snap_${ID}.list
 
 for tmpfile in $TODELLIST $CHECKLIST $FULLLIST $WORKLIST; do
   if [ -f $tmpfile ]; then
