@@ -455,9 +455,9 @@ if [ ! -z "$TRANSPORT_CMD" ]; then
 else
   # try mbuffer
   MBUFFER_SRC_CMD=$($srcrocmd "which mbuffer | fgrep -v 'not found'")
-  [ ! -z "$MBUFFER_SRC_CMD" ] && MBUFFER_SRC_CMD=$MBUFFER_SRC_CMD" -m 64M -q"
+  [ ! -z "$MBUFFER_SRC_CMD" ] && MBUFFER_SRC_CMD=$MBUFFER_SRC_CMD" -m 128m -q"
   MBUFFER_DST_CMD=$($dstrocmd "which mbuffer | fgrep -v 'not found'")
-  [ ! -z "$MBUFFER_DST_CMD" ] && MBUFFER_DST_CMD=$MBUFFER_DST_CMD" -m 64M -q"
+  [ ! -z "$MBUFFER_DST_CMD" ] && MBUFFER_DST_CMD=$MBUFFER_DST_CMD" -m 128m -q"
 fi
 
 # check and resolve source
