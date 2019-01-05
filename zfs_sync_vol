@@ -26,7 +26,7 @@ RECVOPT=${RECVOPT:-""}
 JUSTFORFUN=${JUSTFORFUN:-""}
 MYNAME=${MYNAME:-$(hostname -s)}
 VERBOSE=${VERBOSE:-0}
-SSH_CIPHERS=${SSH_CIPHERS:-"arcfour128,arcfour256,arcfour,blowfish-cbc,aes128-cbc,aes128-ctr,cast128-cbc"}
+SSH_CIPHERS=${SSH_CIPHERS:-""}
 
 SRCZFSLIST=${TMPDIR:-/var/tmp}/srczfslist.$$
 DSTZFSLIST=${TMPDIR:-/var/tmp}/dstzfslist.$$
