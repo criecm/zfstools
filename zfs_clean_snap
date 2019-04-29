@@ -45,8 +45,8 @@ shift $(expr $OPTIND - 1)
 if [ $# -ne 2 ]; then
   usage
 fi
-if ! ( echo $1 | egrep '^[[:digit:]]+h[[:digit:]]+d[[:digit:]]+w[[:digit:]]+m[[:digit:]]+y' > /dev/null ); then
-  echo "expression \"$EXPR\" doesn't match :("
+if ! ( echo $1 | egrep '^[[:digit:]]+[hl][[:digit:]]+d[[:digit:]]+w[[:digit:]]+m[[:digit:]]+y' > /dev/null ); then
+  echo "expression \"$1\" doesn't match :("
   usage
 fi
 
