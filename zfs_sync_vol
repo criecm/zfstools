@@ -502,7 +502,7 @@ if [ -z "$DSTMOUNTBASE" ]; then
 fi
 
 # check DSTMOUNTBASE must exist
-echo $DSTMOUNTBASE | grep -q '^/[a-zA-Z0-9]' || echo $DSTMOUNTBASE | grep '\(none\|legacy\)' || erreur "DSTMOUNTBASE mal defini ($DSTMOUNTBASE)"
+echo $DSTMOUNTBASE | grep -q '^/[a-zA-Z0-9]' || echo $DSTMOUNTBASE | grep -q '\(none\|legacy\)' || erreur "DSTMOUNTBASE mal defini ($DSTMOUNTBASE)"
 
 # check for dangerous new fixed mountpoints on source for new volumes
 for fs in $(grep '!\(local\|received\)$' $SRCZFSLIST.mounts | cut -d'!' -f1 | sed 's|'${SRCVOL}'|'${DSTVOL}'|'); do
