@@ -16,7 +16,7 @@ usage() {
 
 VERBOSE=1
 
-while getopts rs:m:qvh option
+while getopts m:qrs:t:vh option
 do
   case $option in
     m)
@@ -50,7 +50,7 @@ if [ $# -lt 1 ]; then
 fi
 
 if [ -n "$SNAPDATE" ]; then
-  SNAPNAME=${SNAPNAME:-$(TZ=GMT date -jnu -f%s +${TIMEFMT:-GMT-%Y.%m.%d-%H.%M.%S})}
+  SNAPNAME=${SNAPNAME:-$(TZ=GMT date -jnu -f%s +${TIMEFMT:-GMT-%Y.%m.%d-%H.%M.%S} $SNAPDATE)}
 else
   SNAPNAME=${SNAPNAME:-$(TZ=GMT date +${TIMEFMT:-GMT-%Y.%m.%d-%H.%M.%S})}
 fi
