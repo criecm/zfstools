@@ -10,7 +10,7 @@
 # done
 
 usage() {
-  echo "usage: $0 [-r] [-s UTC unix timestamp] [-m maxsnaps] volume|dir"
+  echo "usage: $0 [-r] [-s UTC unix timestamp] [-t strftime format] [-m maxsnaps] volume|dir"
   exit 0
 }
 
@@ -26,7 +26,10 @@ do
       ZFSSNAPRECURSE="-r"
     ;;
     s)
-      SNAPNAME=$(TZ=GMT date -j -f%s +GMT-%Y.%m.%d-%H.%M.%S $OPTARG)
+      SNAPDATE=$OPTARG
+    ;;
+    t)
+      TIMEFMT=$OPTARG
     ;;
     q)
       VERBOSE=0
@@ -46,6 +49,12 @@ if [ $# -lt 1 ]; then
   usage
 fi
 
+if [ -n "$SNAPDATE" ]; then
+  SNAPNAME=${SNAPNAME:-$(TZ=GMT date -jnu -f%s +${TIMEFMT:-GMT-%Y.%m.%d-%H.%M.%S})}
+else
+  SNAPNAME=${SNAPNAME:-$(TZ=GMT date +${TIMEFMT:-GMT-%Y.%m.%d-%H.%M.%S})}
+fi
+
 for arg in $*; do
   vol=$(zfs list -H -oname $arg)
   if [ -z "$vol" ]; then
@@ -53,9 +62,6 @@ for arg in $*; do
     continue
   fi
   if /sbin/zfs list -H -t filesystem,volume $vol > /dev/null; then
-    if [ -z "$SNAPNAME" ]; then
-      SNAPNAME=${SNAPNAME:-$(TZ=GMT date +GMT-%Y.%m.%d-%H.%M.%S)}
-    fi
     /sbin/zfs snapshot ${ZFSSNAPRECURSE:+"-r"} $vol@$SNAPNAME
     [ $VERBOSE -ge 1 ] && echo "$vol@$SNAPNAME"
   fi
