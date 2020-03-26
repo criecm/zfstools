@@ -165,10 +165,11 @@ do
     ;;
     j)
       RELAXSNAPREGEX="YES_RELAXSNAPREGEX"
+      KEEPSRCSNAPS="YES_KEEPSRCSNAPS"
     ;;
     v)
       VERBOSE=$(( $VERBOSE + 1 ))
-      if [ $VERBOSE -gt 1 ]; then
+      if [ $VERBOSE -gt 2 ]; then
         GROSDEBUG="YES_GROSDEBUG"
       fi
     ;;
@@ -200,7 +201,7 @@ erreur() {
 
 inform() {
   if [ ! -z "$TERM" -a -z "$QUIET" ] || [ $VERBOSE -gt 0 ]; then
-    echo "$(date +%Y%m%d-%H:%M:%S) ${0##*/}: " $*
+    echo "$(date +%Y%m%d-%H:%M:%S) ${0##*/}: " $* >&2
   fi
   if [ ! -z "$SYSLOG_ID" ] && [ "$SYSLOG_ID" != "none" ]; then
     logger -p ${SYSLOG_ID}.info -t "${0##*/}["$$"]" -- $@
@@ -212,7 +213,7 @@ warne() {
 }
 
 debug() {
-  if [ $VERBOSE -ge 2 ]; then
+  if [ $VERBOSE -gt 1 ]; then
     inform $@
   fi
 }
@@ -262,7 +263,8 @@ src_ro_run() {
 src_zfs_list() {
   if [ ! -s "$SRCZFSLIST" ]; then
     # WARNING: there are TABs in next line !
-    src_ro_run "zfs list -H -t all -oname,mountpoint,lastbackup:${DSTSNAPHOST:-$MYNAME},origin,jailed -S creation ${LIMIT_RECURSION:+-d1} -r $SRCVOL" | grep -v 'on$' | sed 's/	/\!/g' > $SRCZFSLIST
+    #src_ro_run "zfs list -H -t all -oname,mountpoint,lastbackup:${DSTSNAPHOST:-$MYNAME},origin,jailed -S creation ${LIMIT_RECURSION:+-d1} -r $SRCVOL" | grep -v 'on$' | sed 's/	/\!/g' > $SRCZFSLIST
+    src_ro_run "zfs list -H -t all -oname,mountpoint,lastbackup:${DSTSNAPHOST:-$MYNAME},origin,jailed -S creation ${LIMIT_RECURSION:+-d1} -r $SRCVOL" | awk '/on$/{j=$1;gsub("^.*jails/","",j);gsub("/.*$","",j); gsub(".*","/iocage/jails/"j"/root"$2,$2);}{printf("%s\t%s\t%s\t%s\t%s\n",$1,$2,$3,$4,$5);}' | sed 's/	/\!/g' > $SRCZFSLIST
     src_ro_run "zfs get ${GRECURSE:+-r} -Hp -t filesystem -oname,value,source mountpoint $SRCVOL" | sed 's/	/\!/g' > $SRCZFSLIST.mounts
   fi
   cat $SRCZFSLIST
@@ -325,14 +327,18 @@ make_source_snapshot() {
 # args: srcvol dstvol
 # set LASTCOMMONSNAP if not set
 get_last_common_snapshot() {
-  if [ ! -z "$LASTCOMMONSNAP" ]; then
-    return 0
-  fi
+  debug "get_last_common_snapshot($*)"
+#  if [ ! -z "$LASTCOMMONSNAP" ]; then
+#    return 0
+#  fi
   # if stored in source property, try this one first
+  local SRCVOL=${1:-$SRCVOL}
+  local DSTVOL=${2:-$DSTVOL}
   test1=$(src_zfs_list | grep -E '^'${SRCVOL}'!.*![a-zA-Z0-9]+[-a-zA-Z0-9]+' | cut -d'!' -f3)
   if [ ! -z "$test1" ]; then
     dst_zfs_list | grep -Eq '^'${DSTVOL}'@'${test1}'!' && lastknownsnap=${test1}
   fi
+  debug "get_last_common_snapshot($*) lastknownsnap=$lastknownsnap"
   if [ "$RELAXSNAPREGEX" = "YES_RELAXSNAPREGEX" ]; then
     SNAPCANDIDATES=$(dst_zfs_list | cut -d'!' -f1 | grep -E '^'${DSTVOL}'@.*$')
   else
@@ -346,12 +352,12 @@ get_last_common_snapshot() {
         if ! dst_zfs_list | cut -d'!' -f1 | grep -q '^'$dstfs'@'${snapcandidate}'$'; then
           if is_excluded ${SRCVOL}${dstfs#$DSTVOL}; then
             warne "excluded fs existing on dest: $dstfs : should delete it ?"
-            dst_run "zfs destroy -r $dstfs"
+            #dst_run "zfs destroy -r $dstfs"
             rm $DSTZFSLIST
           elif src_zfs_list | cut -d'!' -f1 | sed 's|'${SRCVOL}'|'${DSTVOL}'|' | grep -q '^'$dstfs; then
             # this volume is part of $SRCVOL :(
-            warne "snapshot ${snapcandidate} missing on $dstfs"
-            #snapcandidate=""
+            debug "snapshot ${snapcandidate} missing on $dstfs"
+#            snapcandidate=""
             break 1
           fi
         fi
@@ -377,9 +383,11 @@ get_last_common_snapshot() {
       fi
     fi
   done
+  debug "get_last_common_snapshot($*) -> $LASTCOMMONSNAP"
   if [ -z "$LASTCOMMONSNAP" ]; then
     return 1
   fi
+  echo $LASTCOMMONSNAP
 }
 
 rollback_to_last_common_snapshot() {
@@ -441,8 +449,21 @@ sync_zfs() {
   else
     SENDOPT="-R"
   fi
+  L=$LASTCOMMONSNAP
+  LASTCOMMONSNAP=$(get_last_common_snapshot ${SRCV} ${DSTV})
+  if [ -z "$LASTCOMMONSNAP" ]; then
+    R=$RELAXSNAPREGEX
+    RELAXSNAPREGEX="YES_RELAXSNAPREGEX"
+    KEEPSRCSNAPS="YES"
+    LASTCOMMONSNAP=$(get_last_common_snapshot ${SRCV} ${DSTV})
+    if [ -z "$LASTCOMMONSNAP" ]; then
+      debug "get_last_common_snapshot ${SRCV} ${DSTV} fails (new zfs ?)"
+    fi
+  fi
+  debug sync_zfs lastcommon for ${SRCV} ${DSTV}: $LASTCOMMONSNAP
   local SRC_SEND_CMD="zfs send ${SENDOPT:+${SENDOPT}} ${LASTCOMMONSNAP:+$INCOPT $LASTCOMMONSNAP} ${SRCV}@${NEWSNAP}"
   local DST_RECV_CMD="zfs receive -v ${RECVOPT:+${RECVOPT}} ${NODSTMOUNT:+ -u} ${DSTV}"
+  LASTCOMMONSNAP=$L
 
   inform "Sending ${SRCV}@${NEWSNAP}${MBUFFER_SRC_CMD:+ with mbuffer}${TRANSPORT_CMD:+ via TRANSPORT_CMD}"
   if [ ! -z "$TRANSPORT_CMD" ]; then
@@ -457,11 +478,11 @@ sync_zfs() {
   fi
   if [ $RET -ne 0 ]; then
     warne "Error transfering from ${SRCHOST:+"$SRCHOST:"}${SRCV}@${NEWSNAP} to ${DSTHOST:+"$DSTHOST:"}${DSTV}${LASTCOMMONSNAP:+" (inc. based on @$LASTCOMMONSNAP)"}. zfs returns $RET"
-    warne "  send command $SRC_SEND_CMD"
-    warne "  receive command $DST_RECV_CMD"
+    warne "  send command: $SRC_SEND_CMD"
+    warne "  receive command: $DST_RECV_CMD"
     warne "you may retry with -B (rollback forced) and/or -j (loosy snapshot search)"
-    SRCSNAPSTODEL=$SRCSNAPSTODEL${NEWSNAP:+" ${SRCV}@${NEWSNAP}"}
-    DSTSNAPSTODEL=$DSTSNAPSTODEL${NEWSNAP:+" ${DSTV}@${NEWSNAP}"}
+#    [ -z "$KEEPSRCSNAPS" ] && SRCSNAPSTODEL=$SRCSNAPSTODEL${NEWSNAP:+" ${SRCV}@${NEWSNAP}"}
+#    [ -z "$KEEPDSTSNAPS" ] && DSTSNAPSTODEL=$DSTSNAPSTODEL${NEWSNAP:+" ${DSTV}@${NEWSNAP}"}
   else
     inform "Transfer ok :)"
     [ -z "$KEEPSRCSNAPS" ] && SRCSNAPSTODEL=$SRCSNAPSTODEL${LASTCOMMONSNAP:+" ${SRCV}@${LASTCOMMONSNAP}"}
@@ -474,19 +495,24 @@ create_zfsdest() {
   local DSTV=${1:-$DSTVOL}
   local SRCV=${2:-$SRCVOL}
   local MNTPOINT=${3:-$(get_mountpoint $DSTV)}
+  src_zfs_list | grep -q '^'${SRCV}'!.*!on$' && local j=1
   dst_zfs_list | grep -q '^'${DSTV}'!' && return 0
-  cmd="zfs create"$(src_ro_run "zfs get -H -oproperty,value,source all ${SRCV}" | grep 'local$' | while read prop val source; do
+  cmd="zfs create"$(src_ro_run "zfs get -H -oproperty,value,source all ${SRCV}" | grep '(local|received)$' | while read prop val source; do
      if [ "$prop" = "mountpoint" ]; then
-       if [ "$val" != "none" -a "$val" != "legacy" ]; then
+       if [ "$j" = "1" ]; then
+         debug "create_zfsdest($*): jailed fs"
+       elif [ "$val" != "none" -a "$val" != "legacy" ]; then
          echo -n " -o orig:mountpoint=$val";
        else
          echo -n " -o $prop=\"$val\"";
-      fi
+       fi
      else
        echo -n " -o $prop=\"$val\"";
      fi
     done)
-  echo "$cmd" | fgrep -q -- "-o mountpoint=" || cmd=${cmd}${MNTPOINT:+" -o mountpoint=$MNTPOINT"}
+  if [ "$j" != "1" ]; then
+    echo "$cmd" | fgrep -q -- "-o mountpoint=" || cmd=${cmd}${MNTPOINT:+" -o mountpoint=$MNTPOINT"}
+  fi
   dst_run "$cmd ${DSTV}" || missingvol ${DSTV:+$DSTV}
   rm $DSTZFSLIST
   RECVOPT="-F"
@@ -513,7 +539,7 @@ get_mountpoint() {
 # recursively get all non-excluded sub-volumes (-R when possible)
 #
 get_zfses() {
-debug get_zfses $*
+  debug get_zfses $*
   local ERRS=0
   local LOOPSRCVOL=${1%@*}
   local SUBVOL=$(echo ${1} | sed 's!'${SRCVOL}'!!; s/@.*$//;')
@@ -524,11 +550,17 @@ debug get_zfses $*
     if ! is_excluded ${LOOPSRCVOL}; then
       DSTMNTPOINT=$(get_mountpoint ${LOOPDSTVOL})
       sync_zfs ${LOOPSRCVOL} ${LOOPDSTVOL} NR || return 1
+    else
+      debug "${LOOPSRCVOL} excluded"
     fi
+    debug get_zfs subfses: $(src_zfs_list | cut -d'!' -f1 | grep '^'${LOOPSRCVOL}'/[^@/]*$' | sed 's*'$LOOPSRCVOL'**')
     local fs
     for fs in $(src_zfs_list | cut -d'!' -f1 | grep '^'${LOOPSRCVOL}'/[^@/]*$' | sed 's*'$LOOPSRCVOL'**'); do
+      debug get_zfses $LOOPSRCVOL fs=$fs
       if ! is_excluded ${LOOPSRCVOL}${fs}; then
         get_zfses ${LOOPSRCVOL}${fs} ${LOOPDSTVOL}${fs} || ERRS=$((ERRS + $?))
+      else
+        debug "${LOOPSRCVOL}${fs} excluded"
       fi
     done
   else
@@ -556,7 +588,7 @@ if [ ! -z "$EXCLUDEFILE" ]; then
     erreur "-x <file> only makes sense with -R or -r"
   fi
 fi
-if [ "$GRECURSE" != "YES_RECURSE" ]; then
+if [ "$GRECURSE" = "FULL" ]; then
   LIMIT_RECURSION="YES_LIMIT"
 fi
 
@@ -599,9 +631,9 @@ if echo "$SRC" | grep '@' >/dev/null; then
   SRCHOST=${SRC##*@}
   SRCSNAPHOST=${SRCHOST%%.*}
   srccmd="ssh ${SSHOPTS} ${SRCHOST}"
-  ZSRCVOL=$(src_zfs_list | grep '^'${SRCVOL}'!' | cut -d'!' -f1)
-  test ! -z "$ZSRCVOL" || erreur "Impossible de se connecter a ${SRCHOST} ou de determiner la source zfs pour $SRCVOL"
-  SRCVOL=$ZSRCVOL
+  #ZSRCVOL=$(src_zfs_list | grep '^'${SRCVOL}'!' | cut -d'!' -f1)
+  test ! -z "$SRCVOL" || erreur "Impossible de se connecter a ${SRCHOST} ou de determiner la source zfs pour $SRCVOL"
+  #SRCVOL=$ZSRCVOL
 fi
 
 if echo "$DST" | grep '@' >/dev/null; then
@@ -644,7 +676,7 @@ if ! src_zfs_list | cut -d'!' -f1 | grep -q '^'${SRCVOL}'$'; then
   if src_zfs_list | cut -d'!' -f2 | grep -q '^'${SRCVOL}'$'; then
     SRCVOL=$(src_zfs_list | fgrep -q '!'${SRCVOL}'!' | cut -d'!' -f1)
   else
-    erreur "Le volume ${SRC} n'existe pas"
+    erreur "Le volume ${SRCVOL} n'existe pas"
   fi
 fi
 
@@ -711,7 +743,8 @@ if [ -n "$(dst_zfs_list | grep -Ev '^'${DSTVOL}'.*!(none|legacy|-)!' | grep -qv 
 fi
 
 # locate last snapshot (if any)
-if ! get_last_common_snapshot && dst_zfs_list | grep -q '^'${DSTVOL}'@'; then
+LASTCOMMONSNAP=$(get_last_common_snapshot)
+if [ -z "$LASTCOMMONSNAP" ] && dst_zfs_list | grep -q '^'${DSTVOL}'@'; then
   # If no common snapshot AND DSTVOL has snapshots, zfs receive would fail.
   erreur 7 "ERREUR: des snapshots existent dans ${DSTVOL} et aucun snapshot commun existant n'a ete trouve... Re-essayez avec -j ou supprimez tout ${DSTVOL}"
 fi
