@@ -334,6 +334,7 @@ get_last_common_snapshot() {
   # if stored in source property, try this one first
   local SRCVOL=${1:-$SRCVOL}
   local DSTVOL=${2:-$DSTVOL}
+  local LASTCOMMONSNAP=""
   test1=$(src_zfs_list | grep -E '^'${SRCVOL}'!.*![a-zA-Z0-9]+[-a-zA-Z0-9]+' | cut -d'!' -f3)
   if [ ! -z "$test1" ]; then
     dst_zfs_list | grep -Eq '^'${DSTVOL}'@'${test1}'!' && lastknownsnap=${test1}
@@ -344,8 +345,9 @@ get_last_common_snapshot() {
   else
     SNAPCANDIDATES=$(dst_zfs_list | cut -d'!' -f1 | grep -E '^'${DSTVOL}'@'${SRCSNAPHOST:-$MYNAME}'-'${DSTSEARCHHOST:-$MYNAME}'-[[:digit:]]{8}-[[:digit:]]{2}h[[:digit:]]{2}m[[:digit:]]{2}s$')
   fi
+  snapcandidate=""
   for snap in ${DSTVOL}@$lastknownsnap $SNAPCANDIDATES; do
-    if src_zfs_list | cut -d'!' -f1 | grep -Eq '^'${SRCVOL}'@'${snap#*@}'$'; then
+    if [ ! -z "${snap#*@}" ] && src_zfs_list | cut -d'!' -f1 | grep -Eq '^'${SRCVOL}'@'${snap#*@}'$'; then
       snapcandidate=${snap#*@}
       # search for snapcandidate on all existing subvolumes on dst (but excluded or nor part of SRCVOL)
       for dstfs in $(dst_zfs_list | cut -d'!' -f1 | grep '^'${DSTVOL}'/[^@]*$'); do
@@ -380,6 +382,8 @@ get_last_common_snapshot() {
       if [ ! -z "$snapcandidate" ]; then
         LASTCOMMONSNAP=$snapcandidate
         break
+      else
+        LASTCOMMONSNAP=""
       fi
     fi
   done
@@ -492,12 +496,14 @@ sync_zfs() {
 }
 
 create_zfsdest() {
+  debug "create_zfsdest($*)"
   local DSTV=${1:-$DSTVOL}
   local SRCV=${2:-$SRCVOL}
   local MNTPOINT=${3:-$(get_mountpoint $DSTV)}
+  local VOLSIZE=""
   src_zfs_list | grep -q '^'${SRCV}'!.*!on$' && local j=1
   dst_zfs_list | grep -q '^'${DSTV}'!' && return 0
-  cmd="zfs create"$(src_ro_run "zfs get -H -oproperty,value,source all ${SRCV}" | grep '(local|received)$' | while read prop val source; do
+  cmd="zfs create"$(src_ro_run "zfs get -H -oproperty,value,source all ${SRCV}" | grep '\(local\|received\)$' | while read prop val source; do
      if [ "$prop" = "mountpoint" ]; then
        if [ "$j" = "1" ]; then
          debug "create_zfsdest($*): jailed fs"
@@ -506,14 +512,17 @@ create_zfsdest() {
        else
          echo -n " -o $prop=\"$val\"";
        fi
+     elif [ "$prop" = "volsize" ]; then
+         echo -n " -V $val";
      else
        echo -n " -o $prop=\"$val\"";
      fi
     done)
-  if [ "$j" != "1" ]; then
+  if [ "$j" != "1" ] && ! echo $cmd | grep -q -- "-V"; then
     echo "$cmd" | fgrep -q -- "-o mountpoint=" || cmd=${cmd}${MNTPOINT:+" -o mountpoint=$MNTPOINT"}
   fi
-  dst_run "$cmd ${DSTV}" || missingvol ${DSTV:+$DSTV}
+  #echo $cmd | grep -q -- "-V" || dst_run "$cmd ${DSTV}" || erreur "Failed to create $DSTV localhost (-C) ? ($cmd)"
+  dst_run "$cmd ${DSTV}" || erreur "Failed to create $DSTV localhost (-C) ? ($cmd)"
   rm $DSTZFSLIST
   RECVOPT="-F"
 }
@@ -686,7 +695,7 @@ if ! echo $DSTBASE | grep -q ^/; then
   DSTBASE=$(dst_ro_run "zfs list -H -o mountpoint ${volbase%/*}")/${volbase##*/}/${DSTVOL##*/}
 fi
 
-if [ -z "$DSTBASE" ] || ! echo $DSTBASE | grep -q ^/; then
+if [ "$CORRECTMOUNTS" = "YES_CORRECTMOUNTS" ] && ( [ -z "$DSTBASE" ] || ! echo $DSTBASE | grep -q ^/ ); then
   erreur "Impossible de definir le point de montage parent de $DSTVOL :("
 fi
 
@@ -808,11 +817,11 @@ if [ -z "$KEEPDSTSNAPS" -a $RET -eq 0 ]; then
 fi
 if [ ! -z "$SRCSNAPSTODEL" ]; then
   inform "Cleaning snapshots${SRCHOST:+ on $SRCHOST}: $SRCSNAPSTODEL" 
-  src_run 'for snap in '$SRCSNAPSTODEL'; do zfs destroy '${GRECURSE:+-r}' -d $snap; done | fgrep -v "not exist"'
+  src_run 'for snap in '$SRCSNAPSTODEL'; do zfs destroy '${GRECURSE:+-r}' -d $snap 2>&1; done | fgrep -v "not exist"'
 fi
 if [ ! -z "$DSTSNAPSTODEL" ]; then
   inform "Cleaning snapshots${DSTHOST:+ on $DSTHOST}: $DSTSNAPSTODEL" 
-  dst_run 'for snap in '$DSTSNAPSTODEL'; do zfs destroy '${GRECURSE:+-r}' -d $snap; done | fgrep -v "not exist"'
+  dst_run 'for snap in '$DSTSNAPSTODEL'; do zfs destroy '${GRECURSE:+-r}' -d $snap 2>&1; done | fgrep -v "not exist"'
 fi
 
 # write newsnap name on lastbackup:$MYNAME property if ok
