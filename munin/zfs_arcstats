@@ -122,7 +122,7 @@ preconfig() {
     activity)
         global_attr="
             graph_title ZFS ARC - Activities
-            graph_category fs
+            graph_category zpool
             graph_args --base 1000 --lower-limit 0
             graph_vlabel misses (-) / hits (+) per second
             graph_info ZFS ARC - Activities
@@ -140,7 +140,7 @@ preconfig() {
     actlist)
         global_attr="
             graph_title ZFS ARC - Activities by cache list
-            graph_category fs
+            graph_category zpool
             graph_args --base 1000 --lower-limit 0
             graph_vlabel ghost hits (-) / hits (+) per second
             graph_info ZFS ARC - Activities by cache list
@@ -158,7 +158,7 @@ preconfig() {
     actdata)
         global_attr="
             graph_title ZFS ARC - Activities by data type
-            graph_category fs
+            graph_category zpool
             graph_args --base 1000 --lower-limit 0
             graph_vlabel misses (-) / hits (+) per second
             graph_info ZFS ARC - Activities by data type
@@ -182,7 +182,7 @@ preconfig() {
     hitratio)
         global_attr="
             graph_title ZFS ARC - Hit ratio
-            graph_category fs
+            graph_category zpool
             graph_args --base 1000 --lower-limit 0 --upper-limit 100 --rigid
             graph_vlabel % hits
             graph_info ZFS ARC - Hit ratio - The graph shows cache hit ratio between munin-update intervals (usually 5 minutes).
