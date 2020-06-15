@@ -685,7 +685,8 @@ if ! src_zfs_list | cut -d'!' -f1 | grep -q '^'${SRCVOL}'$'; then
   if src_zfs_list | cut -d'!' -f2 | grep -q '^'${SRCVOL}'$'; then
     SRCVOL=$(src_zfs_list | fgrep -q '!'${SRCVOL}'!' | cut -d'!' -f1)
   else
-    erreur "Le volume ${SRCVOL} n'existe pas"
+    erreur "Le volume source ${SRCVOL} n'existe pas"
+    src_zfs_list | fgrep '!'${SRCVOL}'!'
   fi
 fi
 
