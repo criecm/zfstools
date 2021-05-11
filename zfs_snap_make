@@ -10,7 +10,7 @@
 # done
 
 usage() {
-  echo "usage: $0 [-r] [-s UTC unix timestamp] [-t strftime format] [-m maxsnaps] volume|dir"
+  echo "usage: $0 [-r] [-s UTC unix timestamp] [-t strftime format] [-m maxsnaps] [-c cleansnapexpr] volume|dir"
   exit 0
 }
 
@@ -36,6 +36,9 @@ do
     ;;
     v)
       VERBOSE=2
+    ;;
+    c)
+      CLEANSNAPEXPR=$2
     ;;
     h)
       usage
@@ -74,4 +77,8 @@ if [ ${MAXSNAPS:-0} -gt 0 ]; then
       /sbin/zfs destroy ${ZFSSNAPRECURSE:+"-r"} -d $snap
     fi
   done
+fi
+
+if [ -n "$CLEANSNAPEXPR" ]; then
+  /usr/local/admin/sysutils/zfs/zfs_clean_snap $ZFSSNAPRECURSE ${VERBOSE:+-v} $CLEANSNAPEXPR $vol
 fi
