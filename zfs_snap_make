@@ -16,7 +16,7 @@ usage() {
 
 VERBOSE=1
 
-while getopts m:qrs:t:vh option
+while getopts m:qrs:t:vc:h option
 do
   case $option in
     m)
@@ -38,7 +38,7 @@ do
       VERBOSE=2
     ;;
     c)
-      CLEANSNAPEXPR=$2
+      CLEANSNAPEXPR=$OPTARG
     ;;
     h)
       usage
@@ -80,5 +80,5 @@ if [ ${MAXSNAPS:-0} -gt 0 ]; then
 fi
 
 if [ -n "$CLEANSNAPEXPR" ]; then
-  /usr/local/admin/sysutils/zfs/zfs_clean_snap $ZFSSNAPRECURSE ${VERBOSE:+-v} $CLEANSNAPEXPR $vol
+  /usr/local/admin/sysutils/zfs/zfs_clean_snap $ZFSSNAPRECURSE ${VERBOSE:+-v $VERBOSE} $CLEANSNAPEXPR $vol
 fi
