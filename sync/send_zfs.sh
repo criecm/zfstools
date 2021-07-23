@@ -54,11 +54,11 @@ case "$command" in
     if zfs list -H -oname -t bookmark "$zfs_fs$bookmark" > /dev/null 2>&1; then
       # si on a un bookmark, on l'utilise
       zfs send -i $bookmark $zfs_fs@$from-$to-$now
-      echo $now > $trace
     else
       # sinon on envoie le snapshot entier
       zfs send $zfs_fs@$from-$to-$now
     fi
+    echo $now > $trace
     exit 0
   ;;
   connect)
