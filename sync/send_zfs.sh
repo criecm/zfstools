@@ -22,6 +22,7 @@ else
   exit 1
 fi
 [ -z "$to" -o -z "$zfs_fs" ] && exit 1
+zfs_fs=$(zfs list -Honame $zfs_fs)
 
 bookmark='#to_'$to
 trace=/var/tmp/zfs_sent_$(echo $zfs_fs | sed 's/\//_/g')
