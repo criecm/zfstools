@@ -22,7 +22,6 @@ else
   exit 1
 fi
 [ -z "$to" -o -z "$zfs_fs" ] && exit 1
-zfs list -Honame $zfs_fs > /dev/null || exit 1
 
 bookmark='#to_'$to
 trace=/var/tmp/zfs_sent_$(echo $zfs_fs | sed 's/\//_/g')
@@ -47,6 +46,8 @@ case "$command" in
     exit 0
   ;;
   send)
+    zfs_fs=$(zfs list -Honame $zfs_fs)
+    [ -n "$zfs_fs" ] || exit 1
     now=$(date +%s)
     zfs snapshot $zfs_fs@$from-$to-$now
     if zfs list -H -oname -t bookmark "$zfs_fs$bookmark" > /dev/null 2>&1; then
@@ -57,6 +58,10 @@ case "$command" in
       # sinon on envoie le snapshot entier
       zfs send $zfs_fs@$from-$to-$now
     fi
+    exit 0
+  ;;
+  connect)
+    echo "ok"
     exit 0
   ;;
   *)
