@@ -59,5 +59,9 @@ case "$command" in
     fi
     exit 0
   ;;
+  *)
+    echo "$0 $*: invalid syntax"
+    exit 1
+  ;;
 esac
 
