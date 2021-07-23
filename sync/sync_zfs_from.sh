@@ -45,12 +45,20 @@ exit_on_error() {
   exit 1
 }
 
+if ! zfs list -Honame $DSTVOL > /dev/null 2>&1; then
+  FORCE=YES
+fi
+
 for SUBZFS in '' $(do_on_srchost $DSTHOST $SRCVOL list | sed 's@^'$SRCVOL'@@'); do
   SRCSUBVOL=$SRCVOL${SUBZFS:+/$SUBZFS}
   DSTSUBVOL=$DSTVOL${SUBZFS:+/$SUBZFS}
   echo "$(date): $SRCHOST:$SRCSUBVOL -> $DSTSUBVOL" >> /var/log/$LOGNAME.log
-  do_on_srchost $DSTHOST $SRCSUBVOL send | zfs receive $DSTSUBVOL >> /var/log/$LOGNAME.log 2>&1 ||
+  if [ "$FORCE" = "YES" ]; then
     do_on_srchost $DSTHOST $SRCSUBVOL send | zfs receive -F $DSTSUBVOL >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
+  else
+    do_on_srchost $DSTHOST $SRCSUBVOL send | zfs receive $DSTSUBVOL >> /var/log/$LOGNAME.log 2>&1 ||
+      do_on_srchost $DSTHOST $SRCSUBVOL send | zfs receive -F $DSTSUBVOL >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
+  fi
   last=$(do_on_srchost $DSTHOST $SRCSUBVOL received)
   echo "$(date): $SRCHOST:$SRCSUBVOL@$last received" >> /var/log/$LOGNAME.log
   if [ -n "$last" ]; then
