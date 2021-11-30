@@ -80,5 +80,5 @@ if [ ${MAXSNAPS:-0} -gt 0 ]; then
 fi
 
 if [ -n "$CLEANSNAPEXPR" ]; then
-  /usr/local/admin/sysutils/zfs/zfs_clean_snap $ZFSSNAPRECURSE ${VERBOSE:+-v $VERBOSE} $CLEANSNAPEXPR $vol
+  $(realpath $(dirname $0))/zfs_clean_snap $ZFSSNAPRECURSE ${VERBOSE:+-v $VERBOSE} $CLEANSNAPEXPR $vol
 fi

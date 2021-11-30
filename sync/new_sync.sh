@@ -3,7 +3,7 @@
 # Installe une synchro
 #
 if [ $# -lt 2 ]; then
-  echo "usage: $0 SRC DST [SSHKEY] [KEEPEXPR]"
+  echo "usage: $0 SRC@SRCHOST DEST [SSHKEY] [KEEPEXPR]"
   echo
   echo "example:"
   echo "  $0 srchost:zdata/shares/volume zdata/shares/volumedest"
@@ -33,7 +33,7 @@ if ssh root@$SRCHOST "echo ok" | grep -q ok; then
       echo "Remove key from $SRCHOST"
       ssh root@$SRCHOST "sed -i.bak '/$PUBKEY/d' .ssh/authorized_keys"
     fi
-    echo "command=\"/usr/local/admin/sysutils/zfs/sync/send_zfs.sh\" $(cat $SSHKEY.pub)" | ssh root@$SRCHOST 'cat >> .ssh/authorized_keys'
+    echo "command=\"$(realpath $(dirname $0))/send_zfs.sh\" $(cat $SSHKEY.pub)" | ssh root@$SRCHOST 'cat >> .ssh/authorized_keys'
   else
     echo "La cle est deja installée"
   fi
@@ -60,7 +60,7 @@ if crontab -l | grep 'sync_zfs_from.*'$SRCHOST:$SRCVOL; then
 fi
 
 echo "Lancer une premiere synchro:"
-echo "/usr/local/admin/sysutils/zfs/sync/sync_zfs_from.sh $SSHKEY $SRCHOST:$SRCVOL $DST $KEEPEXPR"
+echo "$(realpath $(dirname $0))/sync_zfs_from.sh $SSHKEY $SRCHOST:$SRCVOL $DST $KEEPEXPR"
 echo 
 echo "Puis mettre cette commande dans la crontab"
 
