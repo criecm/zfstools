@@ -51,19 +51,19 @@ fi
 
 for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
   SUBZFS=${SVOL#$SRCVOL}
-  SRCSUBVOL=$SVOL
-  DSTSUBVOL=$DSTVOL${SUBZFS#/}
-  echo "$(date): $SRCHOST:$SRCSUBVOL -> $DSTSUBVOL" >> /var/log/$LOGNAME.log
+  SRCZFS=$SVOL
+  DSTZFS=$DSTVOL${SUBZFS#/}
+  echo "$(date): $SRCHOST:$SRCZFS -> $DSTZFS" >> /var/log/$LOGNAME.log
   if [ "$FORCE" = "YES" ]; then
-    do_on_srchost $DSTHOST $SRCSUBVOL send | zfs receive -F $DSTSUBVOL >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
+    do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
   else
-    do_on_srchost $DSTHOST $SRCSUBVOL send | zfs receive $DSTSUBVOL >> /var/log/$LOGNAME.log 2>&1 ||
-      do_on_srchost $DSTHOST $SRCSUBVOL send | zfs receive -F $DSTSUBVOL >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
+    do_on_srchost $DSTHOST $SRCZFS send | zfs receive $DSTZFS >> /var/log/$LOGNAME.log 2>&1 ||
+      do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
   fi
-  last=$(do_on_srchost $DSTHOST $SRCSUBVOL received)
-  echo "$(date): $SRCHOST:$SRCSUBVOL@$last received" >> /var/log/$LOGNAME.log
+  last=$(do_on_srchost $DSTHOST $SRCZFS received)
+  echo "$(date): $SRCHOST:$SRCZFS@$last received" >> /var/log/$LOGNAME.log
   if [ -n "$last" ]; then
-    zfs list -Honame -t snapshot -r -d1 $DSTSUBVOL | egrep '@'${SRCHOST%%.*}'-'$DSTHOST'-[0-9]{10}' | grep -v '@'$last | xargs -L1 zfs destroy -d
+    zfs list -Honame -t snapshot -r -d1 $DSTZFS | egrep '@'${SRCHOST%%.*}'-'$DSTHOST'-[0-9]{10}' | grep -v '@'$last | xargs -L1 zfs destroy -d
   fi
 done
 
