@@ -2,19 +2,43 @@
 #
 # Installe une synchro
 #
-if [ $# -lt 2 ]; then
-  echo "usage: $0 SRCHOST:SRC DEST [SSHKEY] [KEEPEXPR]"
+usage() {
+  echo "usage: $0 [-k sshkey] [-m KEEP_EXPR] SRCHOST:ZFSVOLUME DESTZFSVOLUME" 
   echo
-  echo "example:"
+  echo "examples:"
   echo "  $0 srchost:zdata/shares/volume zdata/shares/volumedest"
+  echo "  $0 -m 24h7d5w9m1y srchost:zdata/shares/volume zdata/shares/volumedest"
   echo
   exit 1
+}
+
+ORIGARGS=$@
+while getopts k:m: option
+do
+  case $option in
+    k)
+      SSHKEY=$OPTARG
+    ;;
+    m)
+      KEEPEXPR=$OPTARG
+    ;;
+    h)
+      usage 0
+    ;;
+  esac
+done
+# shift getopt args from ARGV
+shift $(expr $OPTIND - 1)
+
+
+if [ $# -ne 2 ]; then
+  usage
 fi
 
 SRC=$1
 DST=$2
-SSHKEY=${3:-~/.ssh/id_ed25519_sync}
-KEEPEXPR=${4:-""}
+SSHKEY=${SSHKEY:-~/.ssh/id_ed25519_sync}
+KEEPEXPR=${KEEPEXPR:-""}
 
 SRCHOST=${SRC%%:*}
 SRCVOL=${SRC#*:}
@@ -27,7 +51,7 @@ fi
 
 PUBKEY=$(awk '{printf("%s %s",$1,$2);}' $SSHKEY.pub)
 echo $PUBKEY | grep -q '^ssh-' || exit 1
-if ssh root@$SRCHOST "echo ok" | grep -q ok; then
+if ssh -oBatchMode=yes -ax root@$SRCHOST "echo ok" | grep -q ok; then
   if ! env SSH_AUTH_SOCK='' ssh -oIdentitiesOnly=yes -oBatchMode=yes -axi $SSHKEY $SRCHOST $DSTHOST $SRCVOL connect 2>/dev/null; then
     if ssh root@$SRCHOST "grep '$PUBKEY' .ssh/authorized_keys"; then
       echo "Remove key from $SRCHOST"
