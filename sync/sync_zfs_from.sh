@@ -49,9 +49,10 @@ if ! zfs list -Honame $DSTVOL > /dev/null 2>&1; then
   FORCE=YES
 fi
 
-for SUBZFS in '' $(do_on_srchost $DSTHOST $SRCVOL list | sed 's@^'$SRCVOL'@@'); do
-  SRCSUBVOL=$SRCVOL${SUBZFS:+/$SUBZFS}
-  DSTSUBVOL=$DSTVOL${SUBZFS:+/$SUBZFS}
+for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
+  SUBZFS=${SVOL#$SRCVOL}
+  SRCSUBVOL=$SVOL
+  DSTSUBVOL=$DSTVOL${SUBZFS#/}
   echo "$(date): $SRCHOST:$SRCSUBVOL -> $DSTSUBVOL" >> /var/log/$LOGNAME.log
   if [ "$FORCE" = "YES" ]; then
     do_on_srchost $DSTHOST $SRCSUBVOL send | zfs receive -F $DSTSUBVOL >> /var/log/$LOGNAME.log 2>&1 || exit_on_error

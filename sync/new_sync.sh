@@ -3,7 +3,7 @@
 # Installe une synchro
 #
 if [ $# -lt 2 ]; then
-  echo "usage: $0 SRC@SRCHOST DEST [SSHKEY] [KEEPEXPR]"
+  echo "usage: $0 SRCHOST:SRC DEST [SSHKEY] [KEEPEXPR]"
   echo
   echo "example:"
   echo "  $0 srchost:zdata/shares/volume zdata/shares/volumedest"
