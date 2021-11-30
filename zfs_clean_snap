@@ -6,8 +6,10 @@
 usage() {
   echo "usage: $0 [-r] [-g \"GREP_EXPR\"] [-d] [-h] KEEPEXPR ZFSVOLUME" 
   echo "eg: $0 5l10d5w3m2y ZLIP-ftp/sav"
-  echo "  KEEPEXPR: <nbhours>h<nbdays>d<nbweeks>w<nbmonths>m<nbyears>y"
-  echo "  eg: 5h10d4w3m2y for 5 last snapshots, 10 days, 4 weeks, 3 months and 2 years"
+  echo "  KEEPEXPR: [<nblast>l][<nbhours>h][<nbdays>d][<nbweeks>w][<nbmonths>m][<nbyears>y]"
+  echo "  eg: 5h10d4w3m2y for 5 hours, 10 days, 4 weeks, 3 months and 2 years"
+  echo "  eg: 4w3m2y for 4 weeks, 3 months and 2 years"
+  echo "  eg: 8l3h3m2y for 8 last, 3 hours, 3 months and 2 years"
   echo ""
   echo "  -r (env CLEANSNAP_RECURSE): will destroy recursively (zfs destroy -r)"
   echo "  -g GREP_EXPR (env CLEANSNAP_GREP): will use it to select snapshots (by default match GMT-YYYY.MM.DD-HH.mm.ss)"
@@ -45,8 +47,9 @@ shift $(expr $OPTIND - 1)
 if [ $# -ne 2 ]; then
   usage
 fi
-if ! ( echo $1 | egrep '^[[:digit:]]+[hl][[:digit:]]+d[[:digit:]]+w[[:digit:]]+m[[:digit:]]+y' > /dev/null ); then
-  echo "expression \"$1\" doesn't match :("
+if ! ( echo $1 | egrep '^([[:digit:]]+l)?([[:digit:]]+h)?([[:digit:]]+d)?([[:digit:]]+w)?([[:digit:]]+m)?([[:digit:]]+y)?$' > /dev/null ) || \
+  [ -z "$1" ]; then
+  echo "expression \"$1\" doesn't match [<nblast>l][<nbhours>h][<nbdays>d][<nbweeks>w][<nbmonths>m][<nbyears>y]:("
   usage
 fi
 
@@ -108,17 +111,26 @@ say "$(date) $0 $*"
 EXPR=$1
 VOL=$2
 
+NBLAST=${EXPR%%l*}
+[ "$NBLAST" = "$EXPR" ] && NBLAST=0
+EXPR=${EXPR##*l}
 NBHOURS=${EXPR%%h*}
+[ "$NBHOURS" = "$EXPR" ] && NBHOURS=0
 EXPR=${EXPR##*h}
 NBDAYS=${EXPR%%d*}
+[ "$NBDAYS" = "$EXPR" ] && NBDAYS=0
 EXPR=${EXPR##*d}
 NBWEEKS=${EXPR%%w*}
+[ "$NBWEEKS" = "$EXPR" ] && NBWEEKS=0
 EXPR=${EXPR##*w}
 NBMONTHS=${EXPR%%m*}
+[ "$NBMONTHS" = "$EXPR" ] && NBMONTHS=0
 EXPR=${EXPR##*m}
 NBYEARS=${EXPR%%y*}
+[ "$NBYEARS" = "$EXPR" ] && NBYEARS=0
 #EXPR=${EXPR##*y}
-debug "Will save $NBHOURS hours, $NBDAYS days, $NBWEEKS weeks, $NBMONTHS months and $NBYEARS years of snapshots"
+
+debug "Will save $NBLAST last, $NBHOURS hours, $NBDAYS days, $NBWEEKS weeks, $NBMONTHS months and $NBYEARS years of snapshots"
 
 GREPSNAP=${CLEANSNAP_GREP:-'GMT-2[0-9][0-9][0-9]\.[01][0-9]\.[0-3][0-9]-[0-2][0-9]\.[0-5][0-9]\.[0-5][0-9]$'}
 
@@ -134,18 +146,24 @@ cleanupvol() {
   volume=$1
   TMPLIST=$WORKLIST.tmp
   : > $TMPLIST
-  local NBHOURS NBDAYS NBWEEKS NBMONTHS NBYEARS
+  local NBLAST NBHOURS NBDAYS NBWEEKS NBMONTHS NBYEARS
+  SNAPNUM=$(grep "^$volume@" $WORKLIST | wc -l)
   grep "^$volume@" $WORKLIST | while read name; do
     # skip if already processed
     if grep -q "^$name" $CHECKLIST; then
       continue
     fi
+    SNAPNUM=$(( $SNAPNUM - 1 ))
     ts=$(getsnapdate $name)
     [ -z "$ts" ] && continue
     KEEPIT=""
     # skip if format doesn't match
     if [ $? -ne 0 ] || [ -z "$ts" ]; then
       continue
+    fi
+    if [ $NBLAST -gt $SNAPNUM ]; then
+      KEEPIT=$KEEPIT" last"
+      NBLAST=$(($NBLAST - 1))
     fi
     if [ $NBHOURS -gt 0 ]; then
       if [ $ts -ge $OLDHOURLY ]; then
