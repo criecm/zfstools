@@ -52,7 +52,8 @@ fi
 for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
   SUBZFS=${SVOL#$SRCVOL}
   SRCZFS=$SVOL
-  DSTZFS=$DSTVOL${SUBZFS#/}
+  SUBZFS=${SUBZFS#/}
+  DSTZFS=$DSTVOL${SUBZFS:+/$SUBZFS}
   echo "$(date): $SRCHOST:$SRCZFS -> $DSTZFS" >> /var/log/$LOGNAME.log
   if [ "$FORCE" = "YES" ]; then
     do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
