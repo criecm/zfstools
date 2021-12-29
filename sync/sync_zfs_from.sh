@@ -50,14 +50,24 @@ if ! zfs list -Honame $DSTVOL > /dev/null 2>&1; then
 fi
 
 for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
+#do_on_srchost $DSTHOST $SRCVOL list | while read SVOL SOPTS; do
   SUBZFS=${SVOL#$SRCVOL}
   SRCZFS=$SVOL
   SUBZFS=${SUBZFS#/}
   DSTZFS=$DSTVOL${SUBZFS:+/$SUBZFS}
+  SOPTS=""
   echo "$(date): $SRCHOST:$SRCZFS -> $DSTZFS" >> /var/log/$LOGNAME.log
   if [ "$FORCE" = "YES" ]; then
+    do_on_srchost $DSTHOST $SRCVOL props | while read p v; do
+      SOPTS=$SOPTS"-o $p=\"$v\" "
+    done
+    [ -n "$SOPTS" ] && zfs create $SOPTS $DSTFS
     do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
   else
+    do_on_srchost $DSTHOST $SRCVOL props | while read p v; do
+      [ "$(zfs get -H -s local,received -o value $p $DSTZFS)" = "$v" ] ||
+        zfs set $p="$v" $DSTZFS
+    done
     do_on_srchost $DSTHOST $SRCZFS send | zfs receive $DSTZFS >> /var/log/$LOGNAME.log 2>&1 ||
       do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
   fi

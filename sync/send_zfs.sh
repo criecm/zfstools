@@ -33,6 +33,10 @@ case "$command" in
     zfs list -Honame -r $zfs_fs
     exit 0
   ;;
+  props)
+    zfs get -Hp -s local,received -oproperty,value all $zfs_fs
+    exit 0
+  ;;
   received)
     now=$(cat $trace)
     if [ -z "$now" ]; then
