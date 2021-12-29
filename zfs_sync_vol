@@ -503,7 +503,7 @@ create_zfsdest() {
   local VOLSIZE=""
   src_zfs_list | grep -q '^'${SRCV}'!.*!on$' && local j=1
   dst_zfs_list | grep -q '^'${DSTV}'!' && return 0
-  cmd="zfs create"$(src_ro_run "zfs get -H -oproperty,value,source all ${SRCV}" | grep '\(local\|received\)$' | while read prop val source; do
+  cmd="zfs create"$(src_ro_run "zfs get -H -s local,received -oproperty,value all ${SRCV}" | while read prop val; do
      if [ "$prop" = "mountpoint" ]; then
        if [ "$j" = "1" ]; then
          debug "create_zfsdest($*): jailed fs"
@@ -519,7 +519,8 @@ create_zfsdest() {
      fi
     done)
   if [ "$j" != "1" ] && ! echo $cmd | grep -q -- "-V"; then
-    echo "$cmd" | fgrep -q -- "-o mountpoint=" || cmd=${cmd}${MNTPOINT:+" -o mountpoint=$MNTPOINT"}
+    [ "$(get_mountpoint ${DSTV%/*})" = "${MNTPOINT%/*}" ] || \
+      echo "$cmd" | fgrep -q -- "-o mountpoint=" || cmd=${cmd}${MNTPOINT:+" -o mountpoint=$MNTPOINT"}
   fi
   #echo $cmd | grep -q -- "-V" || dst_run "$cmd ${DSTV}" || erreur "Failed to create $DSTV localhost (-C) ? ($cmd)"
   dst_run "$cmd ${DSTV}" || erreur "Failed to create $DSTV localhost (-C) ? ($cmd)"
@@ -529,18 +530,19 @@ create_zfsdest() {
 
 get_mountpoint() {
   local DSTVOL=$1
-
+  local DSTMNT=""
   [ -n "$CREATEMOUNTPOINT" ] && echo $CREATEMOUNTPOINT && return 0
 
-  [ -z "$DSTMOUNTBASE" -o "$DSTMOUNTBASE" = "none" -o "$DSTMOUNTBASE" = "legacy" ] && \
-    DSTMOUNTBASE=$(dst_ro_run "zfs list -H -o mountpoint $DSTVOL 2>/dev/null")
-  [ -z "$DSTMOUNTBASE" -o "$DSTMOUNTBASE" = "none" -o "$DSTMOUNTBASE" = "legacy" -o "$MOUNTBASE" = "-" ] && \
-    DSTMOUNTBASE=$(dst_ro_run "zfs list -H -o mountpoint ${DSTVOL%/*}")/${DSTVOL#*/}
-
-  [ -z "$DSTMOUNTBASE" -o "$DSTMOUNTBASE" = "none" -o "$DSTMOUNTBASE" = "legacy" ] && \
+  DSTMNT=$(dst_ro_run "zfs list -H -o mountpoint $DSTVOL 2>/dev/null")
+  if [ -z "$DSTMNT" -o "$DSTMNT" = "none" -o "$DSTMNT" = "legacy" -o "$DSTMNT" = "-" ]; then
+    local DSTUP=${DSTVOL%/*}
+    local DSTUPMNT=$(dst_ro_run "zfs list -H -o mountpoint ${DSTUP}")
+    [ -n "$DSTUPMNT" ] && DSTMNT=${DSTUPMNT%/}${DSTVOL#$DSTUP}
+  fi
+  [ -z "$DSTMNT" -o "$DSTMNT" = "none" -o "$DSTMNT" = "legacy" ] && \
     erreur 5 "Impossible de determiner le repertoire de montage"
 
-  echo $DSTMOUNTBASE
+  echo $DSTMNT
 }
 
 # usage: get_zfses src/vol dst/vol
@@ -702,7 +704,7 @@ fi
 
 DSTMOUNTBASE=$(dst_zfs_list | grep '^'${DSTVOL}'!' | cut -d'!' -f2 2>/dev/null)
 
-echo "$DSTMOUNTBASE" | grep -q ^/ || DSTMOUNTBASE=$DSTBASE/${DSTVOL##*/}
+echo "$DSTMOUNTBASE" | grep -q ^/ || DSTMOUNTBASE=${DSTBASE%/}/${DSTVOL##*/}
 
 echo $DSTMOUNTBASE | grep -q ^$DSTBASE || erreur "$DSTMOUNTBASE n'est pas dans $DSTBASE ???"
 
