@@ -68,8 +68,7 @@ for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
       [ "$(zfs get -H -s local,received -o value $p $DSTZFS)" = "$v" ] ||
         zfs set $p="$v" $DSTZFS
     done
-    do_on_srchost $DSTHOST $SRCZFS send | zfs receive $DSTZFS >> /var/log/$LOGNAME.log 2>&1 ||
-      do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
+    do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
   fi
   last=$(do_on_srchost $DSTHOST $SRCZFS received)
   echo "$(date): $SRCHOST:$SRCZFS@$last received" >> /var/log/$LOGNAME.log
