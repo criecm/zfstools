@@ -63,10 +63,11 @@ for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
     do_on_srchost $DSTHOST $SRCVOL props | while read p v; do
       SOPTS=$SOPTS"-o $p=\"$v\" "
     done
+    echo -- "$SOPTS" | grep -q readonly || SOPTS==$SOPTS"-o readonly=on "
     [ -n "$SOPTS" ] && zfs create $SOPTS $DSTFS
     do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
   else
-    do_on_srchost $DSTHOST $SRCVOL props | while read p v; do
+    ( do_on_srchost $DSTHOST $SRCVOL props; echo "readonly	on" ) | while read p v; do
       [ "$(zfs get -H -s local,received -o value $p $DSTZFS)" = "$v" ] ||
         zfs set $p="$v" $DSTZFS
     done

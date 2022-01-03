@@ -43,8 +43,13 @@ case "$command" in
       echo "$trace does not exists" >&2
       exit 1
     fi
-    zfs list -H -oname -t bookmark "$zfs_fs$bookmark" > /dev/null 2>&1 && zfs destroy "$zfs_fs$bookmark"
+    if zfs list -H -oname -t bookmark "$zfs_fs$bookmark" > /dev/null 2>&1; then
+      logger -p local4.info "zfs destroy \"$zfs_fs$bookmark\""
+      zfs destroy "$zfs_fs$bookmark"
+    fi
+    logger -p local4.info "zfs bookmark $zfs_fs@$from-$to-$now \"$zfs_fs$bookmark\""
     zfs bookmark $zfs_fs@$from-$to-$now "$zfs_fs$bookmark"
+    logger -p local4.info "zfs destroy $zfs_fs@$from-$to-$now"
     zfs destroy $zfs_fs@$from-$to-$now
     echo ${from}-${to}-${now}
     rm $trace
@@ -54,12 +59,15 @@ case "$command" in
     zfs_fs=$(zfs list -Honame $zfs_fs)
     [ -n "$zfs_fs" ] || exit 1
     now=$(date +%s)
+    logger -p local4.info "zfs snapshot $zfs_fs@$from-$to-$now"
     zfs snapshot $zfs_fs@$from-$to-$now
     if zfs list -H -oname -t bookmark "$zfs_fs$bookmark" > /dev/null 2>&1; then
       # si on a un bookmark, on l'utilise
+      logger -p local4.info "zfs send -i $bookmark $zfs_fs@$from-$to-$now"
       zfs send -i $bookmark $zfs_fs@$from-$to-$now
     else
       # sinon on envoie le snapshot entier
+      logger -p local4.info "zfs send $zfs_fs@$from-$to-$now"
       zfs send $zfs_fs@$from-$to-$now
     fi
     echo $now > $trace
