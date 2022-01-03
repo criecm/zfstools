@@ -66,7 +66,7 @@ case "$command" in
     exit 0
   ;;
   connect)
-    echo "ok"
+    echo "$(hostname -s) ok"
     exit 0
   ;;
   *)

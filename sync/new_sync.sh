@@ -66,7 +66,7 @@ else
   exit 1
 fi
 
-if [ "$(env SSH_AUTH_SOCK='' ssh -oIdentitiesOnly=yes -oBatchMode=yes -axi $SSHKEY $SRCHOST $DSTHOST $SRCVOL connect)" != "ok" ]; then
+if ! env SSH_AUTH_SOCK='' ssh -oIdentitiesOnly=yes -oBatchMode=yes -axi $SSHKEY $SRCHOST $DSTHOST $SRCVOL connect | grep -q "ok$"; then
   exit 1
 fi
 

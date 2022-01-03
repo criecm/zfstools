@@ -49,6 +49,8 @@ if ! zfs list -Honame $DSTVOL > /dev/null 2>&1; then
   FORCE=YES
 fi
 
+srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | cut -d' ' -f1)
+
 for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
 #do_on_srchost $DSTHOST $SRCVOL list | while read SVOL SOPTS; do
   SUBZFS=${SVOL#$SRCVOL}
@@ -73,7 +75,7 @@ for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
   last=$(do_on_srchost $DSTHOST $SRCZFS received)
   echo "$(date): $SRCHOST:$SRCZFS@$last received" >> /var/log/$LOGNAME.log
   if [ -n "$last" ]; then
-    zfs list -Honame -t snapshot -r -d1 $DSTZFS | egrep '@'${SRCHOST%%.*}'-'$DSTHOST'-[0-9]{10}' | grep -v '@'$last | xargs -L1 zfs destroy -d
+    zfs list -Honame -t snapshot -r -d1 $DSTZFS | egrep '@'${srcname}'-'$DSTHOST'-[0-9]{10}' | grep -v '@'$last | xargs -L1 zfs destroy -d
   fi
 done
 
