@@ -60,7 +60,7 @@ for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
   SOPTS=""
   echo "$(date): $SRCHOST:$SRCZFS -> $DSTZFS" >> /var/log/$LOGNAME.log
   if [ "$FORCE" = "YES" ]; then
-    do_on_srchost $DSTHOST $SRCVOL props | while read p v; do
+    do_on_srchost $DSTHOST $SRCZFS props | while read p v; do
       SOPTS=$SOPTS"-o $p=\"$v\" "
     done
     echo -- "$SOPTS" | grep -q readonly || SOPTS==$SOPTS"-o readonly=on "
