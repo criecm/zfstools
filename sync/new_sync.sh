@@ -51,7 +51,7 @@ fi
 
 PUBKEY=$(awk '{printf("%s %s",$1,$2);}' $SSHKEY.pub)
 echo $PUBKEY | grep -q '^ssh-' || exit 1
-if ssh -oBatchMode=yes -ax root@$SRCHOST "echo ok" | grep -q ok; then
+if ssh -oBatchMode=yes -ax -oStrictHostKeyChecking=accept-new root@$SRCHOST "echo ok" | grep -q ok; then
   if ! env SSH_AUTH_SOCK='' ssh -oIdentitiesOnly=yes -oBatchMode=yes -axi $SSHKEY $SRCHOST $DSTHOST $SRCVOL connect 2>/dev/null; then
     if ssh root@$SRCHOST "grep '$PUBKEY' .ssh/authorized_keys"; then
       echo "Remove key from $SRCHOST"
