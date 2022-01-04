@@ -25,7 +25,7 @@ fi
 zfs_fs=$(zfs list -Honame $zfs_fs)
 
 bookmark='#to_'$to
-trace=/var/tmp/zfs_sent_$(echo $zfs_fs | sed 's/\//_/g')
+trace=/var/tmp/zfs_sent_$(echo $zfs_fs | sed 's/\//_/g')_$to
 from=$(hostname -s)
 
 case "$command" in
