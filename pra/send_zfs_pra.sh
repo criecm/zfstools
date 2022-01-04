@@ -34,7 +34,8 @@ case "$command" in
       echo "$trace does not exists" >&2
       exit 1
     fi
-    if last=$(zfs get -Hovalue lastpra:$to $zfs_fs); then
+    last=$(zfs get -Hovalue lastpra:$to $zfs_fs)
+    if ! [ "$last" = "-" ]; then
       logger -p local4.info "zfs destroy -r $zfs_fs@$last"
       zfs destroy -r $zfs_fs@$last
     fi
@@ -50,9 +51,10 @@ case "$command" in
     now=$(date +%s)
     logger -p local4.info "zfs snapshot $zfs_fs@$from-$to-$now"
     zfs snapshot -r $zfs_fs@$from-$to-$now
-    if lastsnap=$(zfs get -H -ovalue lastpra:$to $zfs_fs 2>/dev/null); then
+    lastsnap=$(zfs get -H -ovalue lastpra:$to $zfs_fs 2>/dev/null)
+    if ! [ "$lastsnap" = "-" ]; then
       # si on a un last, on l'utilise
-      logger -p local4.info "zfs send -i @$lastsnap $zfs_fs@$from-$to-$now"
+      logger -p local4.info "zfs send -RI @$lastsnap $zfs_fs@$from-$to-$now"
       zfs send -RI @$lastsnap $zfs_fs@$from-$to-$now
     else
       # sinon on envoie tout
