@@ -45,10 +45,6 @@ exit_on_error() {
   exit 1
 }
 
-if ! zfs list -Honame $DSTVOL > /dev/null 2>&1; then
-  FORCE=YES
-fi
-
 srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | cut -d' ' -f1)
 
 for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
@@ -59,7 +55,7 @@ for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
   DSTZFS=$DSTVOL${SUBZFS:+/$SUBZFS}
   SOPTS=""
   echo "$(date): $SRCHOST:$SRCZFS -> $DSTZFS" >> /var/log/$LOGNAME.log
-  if [ "$FORCE" = "YES" ]; then
+  if ! zfs list -Honame $DSTVOL > /dev/null 2>&1; then
     do_on_srchost $DSTHOST $SRCZFS props | while read p v; do
       SOPTS=$SOPTS"-o $p=\"$v\" "
     done
