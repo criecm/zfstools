@@ -66,8 +66,6 @@ if ! env SSH_AUTH_SOCK='' ssh -oIdentitiesOnly=yes -oBatchMode=yes -axi $SSHKEY 
   exit 1
 fi
 
-SRCVOL=$(env SSH_AUTH_SOCK='' ssh -oIdentitiesOnly=yes -oBatchMode=yes -axi $SSHKEY $SRCHOST $DSTHOST $SRCVOL list | head -1)
-
 D=$(zfs list -Honame $DST 2>/dev/null)
 if ! [ -z "$D" ]; then
   echo "la destination $D existe deja"
