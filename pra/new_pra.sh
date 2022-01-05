@@ -46,6 +46,7 @@ if ! [ -e "$SSHKEY" ]; then
 fi
 
 PUBKEY=$(awk '{printf("%s %s",$1,$2);}' $SSHKEY.pub)
+pkg info mbuffer > /dev/null || pkg install -y mbuffer
 echo $PUBKEY | grep -q '^ssh-' || exit 1
 if ssh -oBatchMode=yes -ax -oStrictHostKeyChecking=accept-new root@$SRCHOST "echo ok" | grep -q ok; then
   if ! env SSH_AUTH_SOCK='' ssh -oIdentitiesOnly=yes -oBatchMode=yes -axi $SSHKEY $SRCHOST $DSTHOST $SRCVOL connect 2>/dev/null; then
