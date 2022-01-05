@@ -12,6 +12,7 @@ usage() {
   echo "  eg: 8l3h3m2y for 8 last, 3 hours, 3 months and 2 years"
   echo ""
   echo "  -r (env CLEANSNAP_RECURSE): will destroy recursively (zfs destroy -r)"
+  echo "  -R (env CLEANSNAP_RECURSE_MANUALLY): will destroy recursively (zfs destroy -r) AND re-search in each subvolume"
   echo "  -g GREP_EXPR (env CLEANSNAP_GREP): will use it to select snapshots (by default match GMT-YYYY.MM.DD-HH.mm.ss)"
   echo "  -v N (env CLEANSNAP_VERBOSE): will display more information (if N > 0 for now)"
   echo "  -d (env CLEANSNAP_FAKE): no destroy command will be launched for real, but displayed"
@@ -21,10 +22,14 @@ usage() {
 
 CLEANSNAP_VERBOSE=${CLEANSNAP_VERBOSE:-0}
 ORIGARGS=$@
-while getopts rg:dv:h option
+while getopts rRg:dv:h option
 do
   case $option in
     r)
+      CLEANSNAP_RECURSE=yes
+    ;;
+    R)
+      CLEANSNAP_RECURSE_MANUALLY=yes
       CLEANSNAP_RECURSE=yes
     ;;
     g)
@@ -86,7 +91,7 @@ error_with_logs() {
 }
 
 ID=$(echo $2 | sed 's@/@_@g')
-export CLEANSNAP_RECURSE CLEANSNAP_GREP CLEANSNAP_FAKE CLEANSNAP_VERBOSE ID
+export CLEANSNAP_RECURSE_MANUALLY CLEANSNAP_RECURSE CLEANSNAP_GREP CLEANSNAP_FAKE CLEANSNAP_VERBOSE ID
 
 # lock (not more than one by pool)
 if ! [ "$LOCKED" != "YAISSE" ]; then
@@ -252,7 +257,8 @@ cleanupvol() {
 }
 
 # c'est parti
-zfs list -t snapshot -o name -r $VOL | grep '^'$VOL'.*@'$GREPSNAP > $FULLLIST
+[ "${CLEANSNAP_RECURSE_MANUALLY}" = "yes" ] || LIMITOPT=" -d1"
+zfs list -t snapshot -o name -r${LIMITOPT} $VOL | grep '^'$VOL'.*@'$GREPSNAP > $FULLLIST
 cp $FULLLIST $WORKLIST
 for vol in $(sed 's/@.*$//' $FULLLIST | uniq); do
   debug "Cleaning $vol"
