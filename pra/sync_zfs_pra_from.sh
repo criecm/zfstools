@@ -50,7 +50,7 @@ srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | cut -d' ' -f1)
 
 SRCZFS=$SVOL
 echo "$(date): $SRCHOST:$SRCVOL -> $DSTVOL" >> /var/log/$LOGNAME.log
-do_on_srchost $DSTHOST $SRCVOL send | mbuffer | zfs receive -F $DSTVOL >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
+do_on_srchost $DSTHOST $SRCVOL send | mbuffer -q | zfs receive -F $DSTVOL >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
 last=$(do_on_srchost $DSTHOST $SRCVOL received)
 echo "$(date): $SRCHOST:$SRCVOL@$last received" >> /var/log/$LOGNAME.log
 #if [ -n "$last" ]; then
