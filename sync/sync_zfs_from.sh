@@ -64,7 +64,7 @@ for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
     do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
   else
     ( do_on_srchost $DSTHOST $SRCZFS props; echo "readonly	on" ) | while read p v; do
-      localprop=$(zfs get -H -s local,received -o value $p $DSTZFS)
+      localprop=$(zfs get -H -p -s local,received -o value $p $DSTZFS)
       if ! [ "$localprop" = "$v" ]; then
         echo "zfs set $p=\"$v\" $DSTZFS" >> /var/log/$LOGNAME.log
         zfs set $p="$v" $DSTZFS
