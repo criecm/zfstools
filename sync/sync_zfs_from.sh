@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/sh
 #
 # needs sync_to.sh script installed as SSH forced command on src host
 #
