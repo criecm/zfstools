@@ -37,6 +37,12 @@ case "$command" in
     zfs get -Hp -s local,received -oproperty,value all $zfs_fs
     exit 0
   ;;
+  destroy_bookmark)
+   if zfs list -H -oname -t bookmark "$zfs_fs$bookmark" > /dev/null 2>&1; then
+      logger -p local4.info "Force destroy bookmark zfs destroy \"$zfs_fs$bookmark\""
+      zfs destroy "$zfs_fs$bookmark"
+    fi
+   ;;  
   received)
     now=$(cat $trace)
     if [ -z "$now" ]; then
