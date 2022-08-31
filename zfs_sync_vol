@@ -465,7 +465,7 @@ sync_zfs() {
     fi
   fi
   debug sync_zfs lastcommon for ${SRCV} ${DSTV}: $LASTCOMMONSNAP
-  local SRC_SEND_CMD="zfs send ${SENDOPT:+${SENDOPT}} ${LASTCOMMONSNAP:+$INCOPT $LASTCOMMONSNAP} ${SRCV}@${NEWSNAP}"
+  local SRC_SEND_CMD="zfs send ${SENDOPT:+${SENDOPT}} ${LASTCOMMONSNAP:+$INCOPT @$LASTCOMMONSNAP} ${SRCV}@${NEWSNAP}"
   local DST_RECV_CMD="zfs receive -v ${RECVOPT:+${RECVOPT}} ${NODSTMOUNT:+ -u} ${DSTV}"
   LASTCOMMONSNAP=$L
 
