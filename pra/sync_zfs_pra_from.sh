@@ -42,7 +42,7 @@ exit_on_error() {
   echo $* >&2
   echo "$(date): $*" >> /var/log/$LOGNAME.log
   tail /var/log/$LOGNAME.log >&2
-  tail /var/log/$LOGNAME.log | mail -s "Erreur $0 $*" root
+  tail /var/log/$LOGNAME.log | mail -s "Erreur $0 $*" sysadm@ec-m.fr
   exit 1
 }
 
@@ -50,8 +50,24 @@ srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | cut -d' ' -f1)
 
 SRCZFS=$SVOL
 echo "$(date): $SRCHOST:$SRCVOL -> $DSTVOL" >> /var/log/$LOGNAME.log
-do_on_srchost $DSTHOST $SRCVOL send | mbuffer -q | zfs receive -F $DSTVOL >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
-last=$(do_on_srchost $DSTHOST $SRCVOL received)
+do_on_srchost $DSTHOST $SRCVOL send | mbuffer -q | zfs receive -F $DSTVOL >> /var/log/$LOGNAME.log 2>&1
+endcode=$?
+FAILED=""
+if [ $endcode -gt 0 ]; then
+  echo "$(date): $SRCHOST:$SRCVOL@$last returns $endcode : checking" >> /var/log/$LOGNAME.log
+  last=$(do_on_srchost $DSTHOST $SRCVOL last)
+  [ -z "$last" ] && exit_on_error "pas de last ??? comprend rien"
+  for fs in $(zfs list -Honame -r $DSTVOL); do
+    zfs list $fs@$last > /dev/null || FAIL="$fs $FAILED"
+  done
+  if [ -n "$FAILED" ]; then
+    echo "$(date): $SRCHOST:$SRCVOL@$last FAILED" >> /var/log/$LOGNAME.log
+    echo "  $FAILED" >> /var/log/$LOGNAME.log
+    exit_on_error "FAILED: $FAILED"
+  fi
+  echo "$(date): $SRCHOST:$SRCVOL@$last returns $endcode : checked OK :)" >> /var/log/$LOGNAME.log
+fi
+received=$(do_on_srchost $DSTHOST $SRCVOL received)
 echo "$(date): $SRCHOST:$SRCVOL@$last received" >> /var/log/$LOGNAME.log
 #if [ -n "$last" ]; then
 #  zfs list -Honame -t snapshot -r -d1 $DSTVOL | egrep '@'${srcname}'-'$DSTHOST'-[0-9]{10}' | grep -v '@'$last | xargs -L1 zfs destroy -d

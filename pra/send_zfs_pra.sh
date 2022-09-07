@@ -24,7 +24,7 @@ fi
 [ -z "$to" -o -z "$zfs_fs" ] && exit 1
 zfs_fs=$(zfs list -Honame $zfs_fs)
 
-trace=/var/tmp/zfs_sent_$(echo $zfs_fs | sed 's/\//_/g')
+trace=/var/db/zfs_sent_$(echo $zfs_fs | sed 's/\//_/g')-$to
 from=$(hostname -s)
 
 case "$command" in
@@ -44,6 +44,14 @@ case "$command" in
     echo ${from}-${to}-${now}
     rm $trace
     exit 0
+  ;;
+  last)
+    if [ -f $trace ]; then
+      cat $trace
+      exit 0
+    else
+      exit 1
+    fi
   ;;
   send)
     zfs_fs=$(zfs list -Honame $zfs_fs)
