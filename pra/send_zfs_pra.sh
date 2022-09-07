@@ -47,7 +47,7 @@ case "$command" in
   ;;
   last)
     if [ -f $trace ]; then
-      cat $trace
+      echo $from-$to-$(cat $trace)
       exit 0
     else
       exit 1
