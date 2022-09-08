@@ -59,6 +59,14 @@ case "$command" in
     zfs destroy $zfs_fs@$from-$to-$now
     echo ${from}-${to}-${now}
     rm $trace
+    # menage
+    if [ $(date +%u) -eq 0 -a $(date +%H) -lt 2 ]; then
+      for snap in $(zfs list -r -Honame -t snapshot -d 1 $zfs_fs | grep "${zfs_fs}@${from}-${to}-" | grep -v "${zfs_fs}@${from}-${to}-${now}"); do
+        logger -p local4.info "zfs destroy -r $snap (menage)"
+        zfs destroy -rd $snap
+      done
+    fi
+
     exit 0
   ;;
   send)
