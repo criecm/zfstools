@@ -80,7 +80,7 @@ case "$command" in
     exit 0
   ;;
   connect)
-    echo "$(hostname -s) ok"
+    echo "${SSH_CLIENT%% *} $(hostname -s) ok"
     exit 0
   ;;
   *)
