@@ -54,6 +54,10 @@ case "$command" in
         logger -p local4.info "zfs destroy -r $snap (menage)"
         zfs destroy -rd $snap
       done
+      if [ "$(zfs get -s local -H -ovalue lastbackup:$to $zfs_fs)" != "-" ]; then
+        logger -p local4.info "zfs inherit lastbackup:$to $zfs_fs (menage)"
+        zfs inherit lastbackup:$to $zfs_fs
+      fi
     fi
     exit 0
   ;;
@@ -72,6 +76,10 @@ case "$command" in
     logger -p local4.info "zfs snapshot $zfs_fs@$from-$to-$now"
     zfs snapshot -r $zfs_fs@$from-$to-$now
     lastsnap=$(zfs get -H -ovalue lastpra:$to $zfs_fs 2>/dev/null)
+    if [ "$lastsnap" = "-" ]; then
+      # au cas ou on avait une synchro avant
+      lastsnap=$(zfs get -H -ovalue lastbackup:$to $zfs_fs 2>/dev/null)
+    fi
     if ! [ "$lastsnap" = "-" ]; then
       # si on a un last, on l'utilise
       logger -p local4.info "zfs send -RI @$lastsnap $zfs_fs@$from-$to-$now"
