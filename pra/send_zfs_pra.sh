@@ -4,7 +4,7 @@
 # DOIT être déclenché par une "command" de cle ssh
 #
 # arguments (dans $SSH_ORIGINAL_COMMAND):
-#    srchost dsthost srcvol [send|list|received]
+#    srchost dsthost srcvol [send|list|received|connect]
 #
 env > /tmp/REMOTE_env
 echo $0 >> /tmp/REMOTE_env
