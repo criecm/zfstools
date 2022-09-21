@@ -1,0 +1,21 @@
+#!/bin/sh
+#
+# make snapshots for each jail without ZFS in jail
+#
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+
+iocage_fs=$(zfs list -Honame /iocage/jails)
+if [ -z "$iocage_fs" ]; then
+  echo "pas de ZFS pour iocage :("
+  exit 1
+fi
+
+zfs_snap_script="$(realpath $(dirname $0))/zfs_snap_make"
+if ! [ -x "$zfs_snap_script" ]; then
+  echo "impossible de trouver $zfs_snap_script"
+  exit 1
+fi
+
+for j in $(iocage list -h | cut -w -f2); do
+  [ $(iocage get -h jail_zfs $j) -eq 0 ] && $zfs_snap_script -r -c 48h15d3w3m1y -q "$iocage_fs/$j"
+done
