@@ -17,3 +17,8 @@ exemple pour synchroniser SRVSOURCE:zdata/shares/truc vers SRVDEST:zdata/shares/
 - Mettre ça dans SRVDEST# ``crontab -e`` pour automatiser
 - les logs sont dans SRVDEST:/var/log/sync_zdata_shares_truc.log
 
+## en cas de probleme
+
+avec une cle ssh autorisée chez root à la source et dans un tmux:
+``resync_alamain.sh zdata/shares/truc SRVSOURCE``
+
