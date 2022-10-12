@@ -68,7 +68,7 @@ if [ $endcode -gt 0 ]; then
   echo "$(date): $SRCHOST:$SRCVOL@$last returns $endcode : checked OK :)" >> /var/log/$LOGNAME.log
 fi
 received=$(do_on_srchost $DSTHOST $SRCVOL received)
-echo "$(date): $SRCHOST:$SRCVOL@$last received" >> /var/log/$LOGNAME.log
+echo "$(date): $SRCHOST:$SRCVOL@$received received" >> /var/log/$LOGNAME.log
 #if [ -n "$last" ]; then
 #  zfs list -Honame -t snapshot -r -d1 $DSTVOL | egrep '@'${srcname}'-'$DSTHOST'-[0-9]{10}' | grep -v '@'$last | xargs -L1 zfs destroy -d
 #fi
