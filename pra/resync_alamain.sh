@@ -40,7 +40,7 @@ errcount=0
 lastsrcsnap=$(there zfs list -Honame -t snapshot -s creation -r -d1 "$zfs" | grep @${snaphead} | tail -1 | sed 's/^.*@//')
 lastvalidsnap=$(there zfs get -Hovalue lastpra:$(hostname -s) "$zfs")
 # suppression des snapshots de synchro intermediaires inutiles
-there "zfs list -Honame -tsnapshot -r -d1 $zfs | grep '^$zfs@$snaphead' | egrep -v '($lastsrcsnap|$lastvalidsnap)' | xargs -t -L1 zfs destroy -rd"
+#there "zfs list -Honame -tsnapshot -r -d1 $zfs | grep '^$zfs@$snaphead' | egrep -v '($lastsrcsnap|$lastvalidsnap)' | xargs -t -L1 zfs destroy -rd"
 for fs in $(sed 's/@.*//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
   lasthere=$(grep "^$(fgrep $fs@${snaphead} "$LISTDST" | tail -1)$" "$LISTSRC")
   if [ -z "${lasthere}" ]; then
