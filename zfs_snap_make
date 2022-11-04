@@ -10,7 +10,7 @@
 # done
 
 usage() {
-  echo "usage: $0 [-r] [-s UTC unix timestamp] [-t strftime format] [-m maxsnaps] [-c cleansnapexpr] volume|dir"
+  echo "usage: $0 [-r] [-q] [-s UTC unix timestamp] [-t strftime format] [-m maxsnaps] [-c cleansnapexpr] volume|dir"
   exit 0
 }
 
