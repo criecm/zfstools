@@ -45,10 +45,18 @@ exit_on_error() {
   exit 1
 }
 
+logue_error() {
+  echo $* >&2
+  echo "ERROR $(date): $*" >> /var/log/$LOGNAME.log
+  tail /var/log/$LOGNAME.log >&2
+  tail /var/log/$LOGNAME.log | mail -s "Erreur $0 $*" root
+}
+
 srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | cut -d' ' -f1)
 
 for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
 #do_on_srchost $DSTHOST $SRCVOL list | while read SVOL SOPTS; do
+  errs=0
   SUBZFS=${SVOL#$SRCVOL}
   SRCZFS=$SVOL
   SUBZFS=${SUBZFS#/}
@@ -63,7 +71,10 @@ for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
       zfs set $p="$v" $DSTZFS
     done
     do_on_srchost $DSTHOST $SRCZFS destroy_bookmark >> /var/log/$LOGNAME.log 2>&1 || exit_on_error 
-    do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
+    if ! do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1
+      logue_error "ERREUR lors de do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS"
+      errs=$(( errs + 1 ))
+    fi
   else
     ( do_on_srchost $DSTHOST $SRCZFS props; echo "readonly	on" ) | while read p v; do
       localprop=$(zfs get -H -p -s local,received -o value $p $DSTZFS)
@@ -72,13 +83,20 @@ for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
         zfs set $p="$v" $DSTZFS
       fi
     done
-    do_on_srchost $DSTHOST $SRCZFS send | zfs receive $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || \
-      do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || exit_on_error
+    if ! do_on_srchost $DSTHOST $SRCZFS send | zfs receive $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || \
+           do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1; then
+      logue_error "ERREUR lors de do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log"
+      errs=$(( errs + 1 ))
+    fi
   fi
-  last=$(do_on_srchost $DSTHOST $SRCZFS received)
-  echo "$(date): $SRCHOST:$SRCZFS@$last received" >> /var/log/$LOGNAME.log
-  if [ -n "$last" ]; then
-    zfs list -Honame -t snapshot -r -d1 $DSTZFS | egrep '@'${srcname}'-'$DSTHOST'-[0-9]{10}' | grep -v '@'$last | xargs -L1 zfs destroy -d
+  if [ $errs == 0 ]; then
+    last=$(do_on_srchost $DSTHOST $SRCZFS received)
+    echo "$(date): $SRCHOST:$SRCZFS@$last received" >> /var/log/$LOGNAME.log
+    if [ -n "$last" ]; then
+      zfs list -Honame -t snapshot -r -d1 $DSTZFS | egrep '@'${srcname}'-'$DSTHOST'-[0-9]{10}' | grep -v '@'$last | xargs -L1 zfs destroy -d
+    fi
+  else
+    logue_error "$SRCZFS NOT received, snapshots kept"
   fi
 done
 
