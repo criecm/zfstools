@@ -71,7 +71,7 @@ for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
       zfs set $p="$v" $DSTZFS
     done
     do_on_srchost $DSTHOST $SRCZFS destroy_bookmark >> /var/log/$LOGNAME.log 2>&1 || exit_on_error 
-    if ! do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1
+    if ! do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1; then
       logue_error "ERREUR lors de do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS"
       errs=$(( errs + 1 ))
     fi
