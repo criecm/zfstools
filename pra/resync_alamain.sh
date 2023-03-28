@@ -33,14 +33,14 @@ snaphead="${sourcehost%.*}-$(hostname -s)"
 echo "disable cron"
 crontab -l | sed 's@^\([0-9].*sync_zfs_pra_from.sh .* '$zfs'\)$@#\1@' | crontab -
 
-ssh -x "$sourcehost" zfs list -H -oname -t snapshot -s creation -r "$zfs" > $LISTSRC || exiterror "unable to list source snapshots"
+there "zfs list -H -oname -t snapshot -s creation -r '$zfs'" > "$LISTSRC" || exiterror "unable to list source snapshots"
 zfs list -H -oname -t snapshot -s creation -r "$zfs" > $LISTDST || exiterror "unable to list dest snapshots"
 
 errcount=0
 lastsrcsnap=$(there zfs list -Honame -t snapshot -s creation -r -d1 "$zfs" | grep @${snaphead} | tail -1 | sed 's/^.*@//')
 lastvalidsnap=$(there zfs get -Hovalue lastpra:$(hostname -s) "$zfs")
 # suppression des snapshots de synchro intermediaires inutiles
-#there "zfs list -Honame -tsnapshot -r -d1 $zfs | grep '^$zfs@$snaphead' | egrep -v '($lastsrcsnap|$lastvalidsnap)' | xargs -t -L1 zfs destroy -rd"
+there "zfs list -Honame -tsnapshot -r -d1 $zfs | grep '^$zfs@$snaphead' | egrep -v '($lastsrcsnap|$lastvalidsnap)' | xargs -t -L1 zfs destroy -rd"
 for fs in $(sed 's/@.*//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
   lasthere=$(grep "^$(fgrep $fs@${snaphead} "$LISTDST" | tail -1)$" "$LISTSRC")
   if [ -z "${lasthere}" ]; then
