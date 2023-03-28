@@ -58,12 +58,12 @@ if [ $endcode -gt 0 ]; then
   last=$(do_on_srchost $DSTHOST $SRCVOL last)
   [ -z "$last" ] && exit_on_error "pas de last ??? comprend rien"
   for fs in $(zfs list -Honame -r $DSTVOL); do
-    zfs list $fs@$last > /dev/null || FAIL="$fs $FAILED"
+    zfs list $fs@$last > /dev/null || FAILED="$fs $FAILED"
   done
   if [ -n "$FAILED" ]; then
-    echo "$(date): $SRCHOST:$SRCVOL@$last FAILED" >> /var/log/$LOGNAME.log
+    echo "$(date): $SRCHOST:$SRCVOL@$last FAILED for" >> /var/log/$LOGNAME.log
     echo "  $FAILED" >> /var/log/$LOGNAME.log
-    exit_on_error "FAILED: $FAILED"
+    exit_on_error "FAILED with @$last: $FAILED"
   fi
   echo "$(date): $SRCHOST:$SRCVOL@$last returns $endcode : checked OK :)" >> /var/log/$LOGNAME.log
 fi
