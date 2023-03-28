@@ -63,6 +63,11 @@ if [ $endcode -gt 0 ]; then
   if [ -n "$FAILED" ]; then
     echo "$(date): $SRCHOST:$SRCVOL@$last FAILED for" >> /var/log/$LOGNAME.log
     echo "  $FAILED" >> /var/log/$LOGNAME.log
+    LASTOK=$(do_on_srchost $DSTHOST $SRCVOL failed)
+    if [ "$LASTOK" != "-" ]; then
+      echo "zfs rollback to $DSTVOL@$LASTOK" >> /var/log/$LOGNAME.log
+      zfs rollback -r "$DSTVOL@$LASTOK" >> /var/log/$LOGNAME.log 2>&1
+    fi
     exit_on_error "FAILED with @$last: $FAILED"
   fi
   echo "$(date): $SRCHOST:$SRCVOL@$last returns $endcode : checked OK :)" >> /var/log/$LOGNAME.log

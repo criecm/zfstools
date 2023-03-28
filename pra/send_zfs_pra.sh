@@ -59,6 +59,19 @@ case "$command" in
     fi
     exit 0
   ;;
+  failed)
+    now=$(cat "$trace")
+    if [ -z "$now" ]; then
+      echo "$trace does not exists" >&2
+      exit 1
+    fi
+    last=$(zfs get -Hovalue lastpra:$to "$zfs_fs")
+    logger -p local4.warn "failed: zfs destroy -r ${zfs_fs}@${from}-${to}-${now}"
+    zfs destroy -r "${zfs_fs}@${from}-${to}-${now}"
+    rm -f "$trace"
+    echo "${last}"
+    exit 0
+  ;;
   last)
     if [ -f "$trace" ]; then
       echo "$from-$to-$(cat $trace)"
