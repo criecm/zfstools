@@ -49,12 +49,14 @@ logue_error() {
   echo $* >&2
   echo "ERROR $(date): $*" >> /var/log/$LOGNAME.log
   tail /var/log/$LOGNAME.log >&2
-  tail /var/log/$LOGNAME.log | mail -s "Erreur $0 $*" root
 }
 
 srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | cut -d' ' -f1)
 
+NBERRS=0
+NBVOLS=0
 for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
+  NBVOLS=$(( NBVOLS + 1 ))
 #do_on_srchost $DSTHOST $SRCVOL list | while read SVOL SOPTS; do
   errs=0
   SUBZFS=${SVOL#$SRCVOL}
@@ -83,9 +85,8 @@ for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
         zfs set $p="$v" $DSTZFS
       fi
     done
-    if ! do_on_srchost $DSTHOST $SRCZFS send | zfs receive $DSTZFS >> /var/log/$LOGNAME.log 2>&1 || \
-           do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1; then
-      logue_error "ERREUR lors de do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log"
+    if ! do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS >> /var/log/$LOGNAME.log 2>&1; then
+      logue_error "ERREUR lors de do_on_srchost $DSTHOST $SRCZFS send | zfs receive -F $DSTZFS"
       errs=$(( errs + 1 ))
     fi
   fi
@@ -97,8 +98,15 @@ for SVOL in $(do_on_srchost $DSTHOST $SRCVOL list); do
     fi
   else
     logue_error "$SRCZFS NOT received, snapshots kept"
+    NBERRS=$(( NBERRS + 1 ))
   fi
 done
+
+if [ $NBERRS -eq $NBVOLS ] && [ $NBERRS -gt 0 ]; then
+  logue_error "$NBERRS erreurs pour $NBVOLS filesystems/volumes"
+  tail /var/log/$LOGNAME.log | mail -s "$0 on $(hostname -s): $NBERRS erreurs pour $NBVOLS filesystems/volumes" root
+  exit $NBERRS;
+fi
 
 # snapshot dest
 [ ! -z "$KEEPEXPR" ] && $SNAPSCRIPT -r -c $KEEPEXPR $DSTVOL >> /var/log/$LOGNAME.log
