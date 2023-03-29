@@ -37,6 +37,7 @@ there "zfs list -H -oname -t snapshot -s creation -r '$zfs'" > "$LISTSRC" || exi
 zfs list -H -oname -t snapshot -s creation -r "$zfs" > $LISTDST || exiterror "unable to list dest snapshots"
 
 errcount=0
+errwith=""
 lastsrcsnap=$(there zfs list -Honame -t snapshot -s creation -r -d1 "$zfs" | grep @${snaphead} | tail -1 | sed 's/^.*@//')
 lastvalidsnap=$(there zfs get -Hovalue lastpra:$(hostname -s) "$zfs")
 for fs in $(sed 's/@.*//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
@@ -53,7 +54,10 @@ for fs in $(sed 's/@.*//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
   if [ "$lasthere" != "$lastthere" ]; then
     # suppression des snapshots de synchro intermediaires inutiles avant synchro
     there "zfs list -Honame -tsnapshot -r -d1 $fs | grep '$fs@$snaphead' | egrep -v '($lasthere|$lastthere)' | xargs -L1 zfs destroy -d"
-    there zfs send -R ${lasthere:+"-I${lasthere#$fs}"} "$lastthere" | here "mbuffer -q | zfs receive -vF $fs" || errcount=$(( errcount + 1 ))
+    if ! there zfs send -R ${lasthere:+"-I${lasthere#$fs}"} "$lastthere" | here "mbuffer -q | zfs receive -vF $fs"; then
+      errcount=$(( errcount + 1 ))
+      errwith="$fs\n$errwith"
+    fi
   fi
 done
 if [ $errcount -eq 0 ]; then
@@ -76,6 +80,9 @@ if [ $errcount -eq 0 ]; then
   echo "re-enable cron"
   crontab -l | sed 's@^#\([0-9].*sync_zfs_pra_from.sh .* '$zfs'\)$@\1@' | crontab -
 
+else
+  echo "$errcount ERREURS"
+  echo "$errwith"
 fi
 rm -rf "$TMPDIR"
 
