@@ -39,8 +39,6 @@ zfs list -H -oname -t snapshot -s creation -r "$zfs" > $LISTDST || exiterror "un
 errcount=0
 lastsrcsnap=$(there zfs list -Honame -t snapshot -s creation -r -d1 "$zfs" | grep @${snaphead} | tail -1 | sed 's/^.*@//')
 lastvalidsnap=$(there zfs get -Hovalue lastpra:$(hostname -s) "$zfs")
-# suppression des snapshots de synchro intermediaires inutiles
-there "zfs list -Honame -tsnapshot -r -d1 $zfs | grep '^$zfs@$snaphead' | egrep -v '($lastsrcsnap|$lastvalidsnap)' | xargs -t -L1 zfs destroy -rd"
 for fs in $(sed 's/@.*//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
   lasthere=$(grep "^$(fgrep $fs@${snaphead} "$LISTDST" | tail -1)$" "$LISTSRC")
   if [ -z "${lasthere}" ]; then
@@ -53,6 +51,8 @@ for fs in $(sed 's/@.*//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
   lastthere=$(fgrep $fs@$lastsrcsnap "$LISTSRC" | tail -1)
   [ -z "$lastthere" ] && continue
   if [ "$lasthere" != "$lastthere" ]; then
+    # suppression des snapshots de synchro intermediaires inutiles avant synchro
+    there "zfs list -Honame -tsnapshot -r -d1 $fs | grep '$fs@$snaphead' | egrep -v '($lasthere|$lastthere)' | xargs -L1 zfs destroy -d"
     there zfs send -R ${lasthere:+"-I${lasthere#$fs}"} "$lastthere" | here "mbuffer -q | zfs receive -vF $fs" || errcount=$(( errcount + 1 ))
   fi
 done
