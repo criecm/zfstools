@@ -19,9 +19,10 @@ if [ "$LOCKED_SYNC_PRA" != "YES_LOCKED" ]; then
   fi
   LOGNAME=sync_$(echo $DST | sed 's/[^-a-zA-Z0-9_]/_/g;')
   export SSHKEY SRC DST LOGNAME KEEPEXPR
-  echo "$(date): lock $0 $*" >> /var/log/$LOGNAME.log
   exec lockf -t 0 /var/run/$LOGNAME.lock $0
 fi
+
+echo "$(date): lock $0 $*" >> /var/log/$LOGNAME.log
 
 SRCHOST=${SRC%%:*}
 SRCVOL=${SRC#*:}
