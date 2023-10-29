@@ -22,8 +22,6 @@ if [ "$LOCKED_SYNC_PRA" != "YES_LOCKED" ]; then
   exec lockf -t 0 /var/run/$LOGNAME.lock $0
 fi
 
-echo "$(date): lock $0 $*" >> /var/log/$LOGNAME.log
-
 SRCHOST=${SRC%%:*}
 SRCVOL=${SRC#*:}
 DSTHOST=${DST%%:*}
@@ -39,9 +37,13 @@ do_on_srchost() {
   ssh -oIdentitiesOnly=yes -oBatchMode=yes -axi $SSHKEY $SRCHOST $*
 }
 
+loggue() {
+  echo "$(date) [$$] $*" > /var/log/$LOGNAME.log
+}
+
 exit_on_error() {
   echo $* >&2
-  echo "$(date): $*" >> /var/log/$LOGNAME.log
+  loggue $*
   tail /var/log/$LOGNAME.log >&2
   tail /var/log/$LOGNAME.log | mail -s "Erreur $0 $*" sysadm@ec-m.fr
   exit 1
@@ -50,7 +52,7 @@ exit_on_error() {
 srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | cut -d' ' -f1)
 
 SRCZFS=$SVOL
-echo "$(date): $SRCHOST:$SRCVOL -> $DSTVOL" >> /var/log/$LOGNAME.log
+loggue "$SRCHOST:$SRCVOL -> $DSTVOL"
 do_on_srchost $DSTHOST $SRCVOL send | mbuffer -q | zfs receive -F $DSTVOL >> /var/log/$LOGNAME.log 2>&1
 endcode=$?
 FAILED=""
@@ -62,19 +64,19 @@ if [ $endcode -gt 0 ]; then
     zfs list $fs@$last > /dev/null || FAILED="$fs $FAILED"
   done
   if [ -n "$FAILED" ]; then
-    echo "$(date): $SRCHOST:$SRCVOL@$last FAILED for" >> /var/log/$LOGNAME.log
-    echo "  $FAILED" >> /var/log/$LOGNAME.log
+    loggue "$SRCHOST:$SRCVOL@$last FAILED for"
+    loggue "  $FAILED"
     LASTOK=$(do_on_srchost $DSTHOST $SRCVOL failed)
     if [ "$LASTOK" != "-" ]; then
-      echo "zfs rollback to $DSTVOL@$LASTOK" >> /var/log/$LOGNAME.log
+      loggue "zfs rollback to $DSTVOL@$LASTOK"
       zfs rollback -r "$DSTVOL@$LASTOK" >> /var/log/$LOGNAME.log 2>&1
     fi
     exit_on_error "FAILED with @$last: $FAILED"
   fi
-  echo "$(date): $SRCHOST:$SRCVOL@$last returns $endcode : checked OK :)" >> /var/log/$LOGNAME.log
+  loggue "$SRCHOST:$SRCVOL@$last returns $endcode : checked OK :)"
 fi
 received=$(do_on_srchost $DSTHOST $SRCVOL received)
-echo "$(date): $SRCHOST:$SRCVOL@$received received" >> /var/log/$LOGNAME.log
+loggue "$SRCHOST:$SRCVOL@$received received"
 #if [ -n "$last" ]; then
 #  zfs list -Honame -t snapshot -r -d1 $DSTVOL | egrep '@'${srcname}'-'$DSTHOST'-[0-9]{10}' | grep -v '@'$last | xargs -L1 zfs destroy -d
 #fi
