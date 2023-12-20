@@ -3,6 +3,7 @@
 # make snapshots for each jail without ZFS in jail
 #
 PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+KEEPEXPR=${KEEPEXPR:-12l48h15d3w3m1y}
 
 iocage_fs=$(zfs list -Honame /iocage/jails)
 if [ -z "$iocage_fs" ]; then
@@ -17,5 +18,5 @@ if ! [ -x "$zfs_snap_script" ]; then
 fi
 
 for j in $(iocage list -h | cut -w -f2); do
-  [ $(iocage get -h jail_zfs $j) -eq 0 ] && $zfs_snap_script -r -c 48h15d3w3m1y -q "$iocage_fs/$j"
+  [ $(iocage get -h jail_zfs $j) -eq 0 ] && $zfs_snap_script -r -c $KEEPEXPR -q "$iocage_fs/$j"
 done
