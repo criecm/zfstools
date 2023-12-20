@@ -139,11 +139,11 @@ debug "Will save $NBLAST last, $NBHOURS hours, $NBDAYS days, $NBWEEKS weeks, $NB
 
 GREPSNAP=${CLEANSNAP_GREP:-'GMT-2[0-9][0-9][0-9]\.[01][0-9]\.[0-3][0-9]-[0-2][0-9]\.[0-5][0-9]\.[0-5][0-9]$'}
 
-OLDHOURLY=$(date -u -v -$(($NBHOURS +1))H +%s)
-OLDDAILY=$(date -u -v -$(($NBDAYS +1))d +%s)
-OLDWEEKLY=$(date -u -v -$(($NBWEEKS +1))w +%s)
-OLDMONTHLY=$(date -u -v -$(($NBMONTHS +1))m +%s)
-OLDYEARLY=$(date -u -v -$(($NBYEARS +1))y +%s)
+OLDHOURLY=$(date -u -v -$(( NBHOURS +1 ))H +%s)
+OLDDAILY=$(date -u -v -$(( NBDAYS +1 ))d +%s)
+OLDWEEKLY=$(date -u -v -$(( NBWEEKS * 7 + 2 ))d +%s)
+OLDMONTHLY=$(date -u -v -$(( NBMONTHS * 31 ))d +%s)
+OLDYEARLY=$(date -u -v -$(( NBYEARS * 365 +30 ))d +%s)
 
 # la fonction principale
 # usage: cleanupvol volume list
