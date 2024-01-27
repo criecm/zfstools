@@ -48,7 +48,7 @@ for fs in $(sed 's/@.*//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
       grep -q "^${snap}$" "$LISTSRC" && lasthere=${snap}
     done
   fi
-  [ -n "$lasthere" ] && here zfs rollback -r "$lasthere"
+  [ -n "$lasthere" ] && [ "$(grep "^$fs@" "$LISTDST" | tail -1)" != "$lasthere" ] && here zfs rollback -r "$lasthere"
   lastthere=$(fgrep $fs@$lastsrcsnap "$LISTSRC" | tail -1)
   [ -z "$lastthere" ] && continue
   if [ "$lasthere" != "$lastthere" ]; then
