@@ -61,7 +61,7 @@ for fs in $(sed 's/@.*//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
   fi
 done
 if [ $errcount -eq 0 ]; then
-  lastdst=$(zfs list -Honame -t snapshot -s creation -r -d1 "$zfs" | tail -1)
+  lastdst=$(zfs list -Honame -t snapshot -s creation -r -d1 "$zfs" | grep @${snaphead} | tail -1)
   there "zfs list -r -d1 -t snapshot -Honame $zfs" > "$LISTSRC"
   if ! grep -q "^${lastdst}$" "$LISTSRC"; then
     for snap in $(zfs list -Honame -t snapshot -s creation -r -d1 "$zfs" | fgrep $zfs); do
@@ -72,7 +72,9 @@ if [ $errcount -eq 0 ]; then
   lastsrc=$(there zfs list -Honame -t snapshot -s creation "$zfs@$lastsrcsnap")
   # suppression des snapshots de synchro intermediaires inutiles
   there "zfs list -Honame -tsnapshot -r -d1 $zfs | grep '^$zfs@$snaphead' | egrep -v '($lastsrc|$lastdst|$lastvalidsnap)' | xargs -t -L1 zfs destroy -d"
-  if [ "$lastsrc" != "$lastdst" ]; then
+  if zfs list $zfs@${lastsrc#*@} > /dev/null 2>&1; then
+    zfs rollback -r $zfs@${lastsrc#*@}
+  elif [ "$lastsrc" != "$lastdst" ]; then
     there zfs send -I"${lastdst#$zfs}" "$lastsrc" | here "mbuffer -q | zfs receive -vF $zfs" || exiterror "PB a la synchro finale"
   fi 
   there "zfs set lastpra:$(hostname -s)=${lastsrc#$zfs@} $zfs"
