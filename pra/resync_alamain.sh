@@ -41,8 +41,14 @@ errwith=""
 lastsrcsnap=$(there zfs list -Honame -t snapshot -s creation -r -d1 "$zfs" | grep @${snaphead} | tail -1 | sed 's/^.*@//')
 lastvalidsnap=$(there zfs get -Hovalue lastpra:$(hostname -s) "$zfs")
 for fs in $(sed 's/@.*//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
-  lasthere=$(grep "^$(fgrep $fs@${snaphead} "$LISTDST" | tail -1)$" "$LISTSRC")
+  lastdsthere=$(grep "^$fs@${snaphead}" "$LISTDST" | tail -1)
+  if [ -n "${lastdsthere}" ]; then
+    lasthere=$(grep "^$lastdsthere$" "$LISTSRC")
+  else
+    lasthere=""
+  fi
   if [ -z "${lasthere}" ]; then
+    echo "no sync snap for $fs"
     lasthere=""
     for snap in $(grep "^$fs@" "$LISTDST"); do
       grep -q "^${snap}$" "$LISTSRC" && lasthere=${snap}
