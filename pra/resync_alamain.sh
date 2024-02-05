@@ -48,16 +48,15 @@ for fs in $(sed 's/@.*//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
     lasthere=""
   fi
   if [ -z "${lasthere}" ]; then
-    echo "no sync snap for $fs"
-    lasthere=""
     for snap in $(grep "^$fs@" "$LISTDST"); do
       grep -q "^${snap}$" "$LISTSRC" && lasthere=${snap}
     done
+    [ -z "${lasthere}" ] && echo "no sync snap for $fs"
   fi
   [ -n "$lasthere" ] && [ "$(grep "^$fs@" "$LISTDST" | tail -1)" != "$lasthere" ] && here zfs rollback -r "$lasthere"
   lastthere=$(fgrep $fs@$lastsrcsnap "$LISTSRC" | tail -1)
   [ -z "$lastthere" ] && continue
-  if [ "$lasthere" != "$lastthere" ]; then
+  if [ -n "$lasthere" ] && [ "$lasthere" != "$lastthere" ]; then
     # suppression des snapshots de synchro intermediaires inutiles avant synchro
     there "zfs list -Honame -tsnapshot -r -d1 $fs | grep '$fs@$snaphead' | egrep -v '($lasthere|$lastthere)' | xargs -L1 zfs destroy -d"
     if ! there zfs send -R ${lasthere:+"-I${lasthere#$fs}"} "$lastthere" | here "mbuffer -q | zfs receive -vF $fs"; then
@@ -75,7 +74,16 @@ if [ $errcount -eq 0 ]; then
     done
     [ -n "$lastdst" ] && here zfs rollback "$lastdst"
   fi
-  lastsrc=$(there zfs list -Honame -t snapshot -s creation "$zfs@$lastsrcsnap")
+  lastsrc=$(grep "^$zfs@$lastsrcsnap$" "$LISTSRC")
+  if [ -z "$lastsrc" ]; then
+    for snap in $(zfs list -Honame -tsnap -s creation $zfs | sed 's/^.*@//'); do
+      grep -q "^$zfs@$snap$" "$LISTSRC" && lastsrc=$zfs@$snap && break
+    done
+  fi
+  if [ -z "$lastsrc" ]; then
+    echo "Erreur avec $zfs: pas de snapshot pour la synchro :/" >&2
+    exit 1
+  fi
   # suppression des snapshots de synchro intermediaires inutiles
   there "zfs list -Honame -tsnapshot -r -d1 $zfs | grep '^$zfs@$snaphead' | egrep -v '($lastsrc|$lastdst|$lastvalidsnap)' | xargs -t -L1 zfs destroy -d"
   if zfs list $zfs@${lastsrc#*@} > /dev/null 2>&1; then
