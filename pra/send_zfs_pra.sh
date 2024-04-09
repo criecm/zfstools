@@ -12,7 +12,7 @@ if [ -n "$SSH_ORIGINAL_COMMAND" ]; then
   zfs_fs="${SSH_ORIGINAL_COMMAND#* }"
   command="${SSH_ORIGINAL_COMMAND##* }"
   if [ "$command" = "connect" ]; then
-    echo "${SSH_CLIENT%% *} $(hostname -s) ok"
+    echo "${SSH_CLIENT%% *} $(hostname -f) ok"
     exit 0
   fi
   if [ "$command" = "$zfs_fs" ]; then
