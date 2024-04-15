@@ -4,7 +4,8 @@
 # DOIT être déclenché par une "command" de cle ssh
 #
 # arguments (dans $SSH_ORIGINAL_COMMAND):
-#    srchost dsthost srcvol [send|list|received]
+#    dsthost srcvol [send|list|received]
+#    dsthost connect
 #
 env > /tmp/REMOTE_env
 echo $0 >> /tmp/REMOTE_env
@@ -12,6 +13,10 @@ if [ -n "$SSH_ORIGINAL_COMMAND" ]; then
   to=${SSH_ORIGINAL_COMMAND%% *}
   zfs_fs=${SSH_ORIGINAL_COMMAND#* }
   command=${SSH_ORIGINAL_COMMAND##* }
+  if [ "$command" = "connect" ]; then
+    echo "${SSH_CLIENT%% *} $(hostname -s) ok"
+    exit 0
+  fi
   if [ "$command" = "$zfs_fs" ]; then
     command="send"
   else
@@ -85,10 +90,6 @@ case "$command" in
       zfs send $zfs_fs@$from-$to-$now
     fi
     echo $now > $trace
-    exit 0
-  ;;
-  connect)
-    echo "$(hostname -s) ok"
     exit 0
   ;;
   *)
