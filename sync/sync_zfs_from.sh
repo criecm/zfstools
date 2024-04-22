@@ -51,7 +51,7 @@ logue_error() {
   tail /var/log/$LOGNAME.log >&2
 }
 
-srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | cut -d' ' -f1)
+srcname=$(do_on_srchost $DSTHOST connect | cut -d' ' -f2)
 
 NBERRS=0
 NBVOLS=0
