@@ -17,7 +17,9 @@ if [ "$LOCKED_SYNC_JAILS" != "YES_LOCKED" ]; then
     KEEPEXPR=$4
   fi
   LOGNAME=sync_$(echo $DST | sed 's/[^-a-zA-Z0-9_]/_/g;')
-  export SSHKEY SRC DST LOGNAME KEEPEXPR
+  MYTMPDIR=${TMPDIR:-/var/tmp}/sync_zfs
+  mkdir -n 700 $MYTMPDIR
+  export SSHKEY SRC DST LOGNAME KEEPEXPR MYTMPDIR
   echo "$(date): lock $0 $*" >> /var/log/$LOGNAME.log
   exec lockf -t 0 /var/run/$LOGNAME.lock $0
 fi
@@ -34,7 +36,7 @@ if [ -n "$KEEPEXPR" ]; then
 fi
 
 do_on_srchost() {
-  ssh -oIdentitiesOnly=yes -oBatchMode=yes -axi $SSHKEY $SRCHOST $*
+  ssh -oIdentitiesOnly=yes -oBatchMode=yes -ax -oControlMaster=auto -oControlPath=$MYTMPDIR/%h%p%r -oControlPersist=yes -i $SSHKEY $SRCHOST $*
 }
 
 exit_on_error() {
@@ -109,6 +111,8 @@ if [ $NBERRS -eq $NBVOLS ] && [ $NBERRS -gt 0 ]; then
   tail /var/log/$LOGNAME.log | mail -s "$0 on $(hostname -s): $NBERRS erreurs pour $NBVOLS filesystems/volumes" root
   exit $NBERRS;
 fi
+
+ssh -oIdentitiesOnly=yes -oBatchMode=yes -ax -oControlMaster=auto -oControlPath=$MYTMPDIR/%h%p%r -oControlPersist=yes -O exit -i $SSHKEY $SRCHOST
 
 # snapshot dest
 [ ! -z "$KEEPEXPR" ] && $SNAPSCRIPT -r -c $KEEPEXPR $DSTVOL >> /var/log/$LOGNAME.log
