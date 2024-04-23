@@ -26,6 +26,7 @@ JUSTFORFUN=${JUSTFORFUN:-""}
 MYNAME=${MYNAME:-$(hostname -s)}
 VERBOSE=${VERBOSE:-0}
 SSH_CIPHERS=${SSH_CIPHERS:-""}
+PERSISTSSH=${PERSISTSSH:-""}
 
 SRCZFSLIST=${TMPDIR:-/var/tmp}/srczfslist.$$
 DSTZFSLIST=${TMPDIR:-/var/tmp}/dstzfslist.$$
@@ -54,6 +55,7 @@ usage() {
   echo "      TODO: make this work without terminal (eg: cron) \!\!\!"
   echo "      -o \"transport opts\": specify options for transport server - (source)"
   echo "      -O \"transport opts\": specify options for transport client - (destination)"
+  echo "      -p \"use ssh's ControlMaster feature to reduce ssh connections\""
   echo "      -s: avoid deleting old sync snapshots on source after incremental transfer"
   echo "      -S: avoid deleting old sync snapshots on destination after incremental transfer"
   echo "      -T: use a temporary 'known_hosts' and skip ssh key check (restauration case)"
@@ -86,7 +88,7 @@ shortusage() {
 }
 
 ORIGARGS=$@
-while getopts IRrk:t:sSo:O:H:hCc:nuUzTb:ax:Bm:l:jv option
+while getopts IRrk:t:sSo:pO:H:hCc:nuUzTb:ax:Bm:l:jv option
 do
   case $option in
     I)
@@ -137,6 +139,9 @@ do
     ;;
     o)
       TRANSPORT_SRC_OPTS=$OPTARG
+    ;;
+    p)
+      PERSISTSSH="YES"
     ;;
     O)
       TRANSPORT_DST_OPTS=$OPTARG
@@ -627,7 +632,13 @@ SYSLOG_ID=${SYSLOG_ID:-user}
 ####################
 ### process args ###
 ####################
-SSHOPTS="-T"${SSHKEY:+" -i $SSHKEY"}${TEMPSSH:+" -oUserKnownHostsFile=${TMPDIR:-/tmp}/kkk -oCheckHostIP=no"}
+if [ "x$PERSISTSSH" = "xYES" ]; then
+  if [ -z "$TMPDIR" ]; then
+    export TMPDIR=/var/tmp/sshs
+    mkdir -m 0700 $TMPDIR
+  fi
+fi
+SSHOPTS="-T"${SSHKEY:+" -i $SSHKEY"}${TEMPSSH:+" -oUserKnownHostsFile=${TMPDIR:-/tmp}/kkk -oCheckHostIP=no"}${PERSISTSSH:+" -oControlMaster=auto -oControlPath=$TMPDIR/%C -oControlPersist=yes"}
 
 # determine source and dest hosts, volumes,...
 SRCHOST=""
@@ -835,6 +846,12 @@ rm -f $SRCZFSLIST $SRCZFSLIST.mounts $DSTZFSLIST
 
 TCLEANUPOK=$(date +%s)
 TCLEANUP=$(($TCLEANUPOK - $TPOSTCHECKSOK))
+
+if [ "x$PERSISTSSH" = "xYES" ]; then
+  SSHOPTS=$SSHOPTS" -O exit"
+  src_run "echo end ${SRCHOST} ${SRCVOL}"
+  dst_run "echo end ${SRCHOST} ${SRCVOL}"
+fi
 
 TEND=$(($TCLEANUPOK - $TBEGIN))
 inform "${0##*/} end: ${TCHECKS}s checking, ${TMKSNAP}s snapshot, ${TTRANSFER}s transfer, ${TPOSTCHECKS}s checking, ${TCLEANUP}s cleanup, ${TEND}s total."
