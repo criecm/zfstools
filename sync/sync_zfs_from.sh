@@ -18,7 +18,7 @@ if [ "$LOCKED_SYNC_JAILS" != "YES_LOCKED" ]; then
   fi
   LOGNAME=sync_$(echo $DST | sed 's/[^-a-zA-Z0-9_]/_/g;')
   MYTMPDIR=${TMPDIR:-/var/tmp}/sync_zfs
-  mkdir -n 700 $MYTMPDIR
+  mkdir -m 700 $MYTMPDIR
   export SSHKEY SRC DST LOGNAME KEEPEXPR MYTMPDIR
   echo "$(date): lock $0 $*" >> /var/log/$LOGNAME.log
   exec lockf -t 0 /var/run/$LOGNAME.lock $0
