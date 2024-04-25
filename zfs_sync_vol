@@ -849,8 +849,8 @@ TCLEANUP=$(($TCLEANUPOK - $TPOSTCHECKSOK))
 
 if [ "x$PERSISTSSH" = "xYES" ]; then
   SSHOPTS=$SSHOPTS" -O exit"
-  src_run "echo end ${SRCHOST} ${SRCVOL}"
-  dst_run "echo end ${SRCHOST} ${SRCVOL}"
+  src_run "echo end ${SRCHOST} ${SRCVOL}" 2>/dev/null
+  dst_run "echo end ${SRCHOST} ${SRCVOL}" 2>/dev/null
 fi
 
 TEND=$(($TCLEANUPOK - $TBEGIN))
