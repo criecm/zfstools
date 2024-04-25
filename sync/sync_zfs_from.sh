@@ -112,7 +112,7 @@ if [ $NBERRS -eq $NBVOLS ] && [ $NBERRS -gt 0 ]; then
   exit $NBERRS;
 fi
 
-ssh -oIdentitiesOnly=yes -oBatchMode=yes -ax -oControlMaster=auto -oControlPath=$MYTMPDIR/%h%p%r -oControlPersist=yes -O exit -i $SSHKEY $SRCHOST
+ssh -oIdentitiesOnly=yes -oBatchMode=yes -ax -oControlMaster=auto -oControlPath=$MYTMPDIR/%h%p%r -oControlPersist=yes -O exit -i $SSHKEY $SRCHOST 2>/dev/null
 
 # snapshot dest
 [ ! -z "$KEEPEXPR" ] && $SNAPSCRIPT -r -c $KEEPEXPR $DSTVOL >> /var/log/$LOGNAME.log
