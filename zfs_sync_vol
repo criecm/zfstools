@@ -445,8 +445,10 @@ sync_zfs() {
   if [ $# -eq 1 -a "$1" = "NR" ]; then
     shift
     LRECURSE=""
-    debug "sync_zfs: create_zfsdest $DSTV $SRCV"
-    create_zfsdest ${DSTV} ${SRCV}
+    if ! dst_zfs_list | grep -q '^'${DSTV}'!'; then
+      debug "sync_zfs: create_zfsdest $DSTV $SRCV"
+      create_zfsdest ${DSTV} ${SRCV}
+    fi
   else
     LRECURSE="$GRECURSE"
   fi
@@ -507,6 +509,7 @@ create_zfsdest() {
   local MNTPOINT=${3:-$(get_mountpoint $DSTV)}
   local VOLSIZE=""
   src_zfs_list | grep -q '^'${SRCV}'!.*!on$' && local j=1
+  rm $DSTZFSLIST
   dst_zfs_list | grep -q '^'${DSTV}'!' && return 0
   cmd="zfs create"$(src_ro_run "zfs get -H -s local,received -oproperty,value all ${SRCV}" | while read prop val; do
      if [ "$prop" = "mountpoint" ]; then
