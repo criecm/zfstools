@@ -258,7 +258,7 @@ cleanupvol() {
 
 # c'est parti
 [ "${CLEANSNAP_RECURSE_MANUALLY}" = "yes" ] || LIMITOPT=" -d1"
-zfs list -t snapshot -o name -r${LIMITOPT} $VOL | grep '^'$VOL'.*@'$GREPSNAP > $FULLLIST
+zfs list -t snapshot -o name -r${LIMITOPT} $VOL | grep '^'$VOL'.*@'$GREPSNAP > $FULLLIST || exit 1
 cp $FULLLIST $WORKLIST
 for vol in $(sed 's/@.*$//' $FULLLIST | uniq); do
   debug "Cleaning $vol"
