@@ -104,8 +104,8 @@ FULLLIST=/tmp/zfs_clean_snap_${ID}.fullist
 WORKLIST=/tmp/zfs_clean_snap_${ID}.list
 
 for tmpfile in $TODELLIST $CHECKLIST $FULLLIST $WORKLIST; do
-  if [ -f $tmpfile ]; then
-    echo "derniere execution non finie: $tmpfile existe" 1>&2
+  if [ -f $tmpfile ] && [ $(stat -f%m $tmpfile) -lt $(( $(date +%s) - 3600 )) ]; then
+    echo "derniere execution non finie: $tmpfile existe depuis moins d'1 heure" 1>&2
     exit 1
   fi
   touch $tmpfile
@@ -258,31 +258,32 @@ cleanupvol() {
 
 # c'est parti
 [ "${CLEANSNAP_RECURSE_MANUALLY}" = "yes" ] || LIMITOPT=" -d1"
-zfs list -t snapshot -o name -r${LIMITOPT} $VOL | grep '^'$VOL'.*@'$GREPSNAP > $FULLLIST || exit 1
-cp $FULLLIST $WORKLIST
-for vol in $(sed 's/@.*$//' $FULLLIST | uniq); do
-  debug "Cleaning $vol"
-  cleanupvol $vol
-done
-ERRS=""
-if [ -s $TODELLIST ]; then
-  # A ce moment on efface pour de vrai
-  for zsnap in $(cat $TODELLIST); do 
-    if ! doit "zfs destroy -d${CLEANSNAP_RECURSE:+r} $zsnap"; then
-      ERRS=$ERRS" "$zsnap
-    fi
+if zfs list -t snapshot -o name -r${LIMITOPT} $VOL 2>/dev/null | grep '^'$VOL'.*@'$GREPSNAP > $FULLLIST; then
+  cp $FULLLIST $WORKLIST
+  for vol in $(sed 's/@.*$//' $FULLLIST | uniq); do
+    debug "Cleaning $vol"
+    cleanupvol $vol
   done
-  if [ ! -z "$ERRS" ]; then
-    error_with_logs "Erreurs a la suppression de $ERRS :("
-  else
-    # check
-    debug "checking"
-    zfs list -t snapshot -o name -r $VOL | grep '^'$VOL'.*@'$GREPSNAP > $WORKLIST
-    CHECK=$(cat $CHECKLIST $WORKLIST | sort | uniq -d)
-    if [ -n "$CHECK" ]; then
-      debug "checks: snapshots en trop a la fin: $CHECK"
+  ERRS=""
+  if [ -s $TODELLIST ]; then
+    # A ce moment on efface pour de vrai
+    for zsnap in $(cat $TODELLIST); do
+      if ! doit "zfs destroy -d${CLEANSNAP_RECURSE:+r} $zsnap"; then
+        ERRS=$ERRS" "$zsnap
+      fi
+    done
+    if [ ! -z "$ERRS" ]; then
+      error_with_logs "Erreurs a la suppression de $ERRS :("
+    else
+      # check
+      debug "checking"
+      zfs list -t snapshot -o name -r $VOL | grep '^'$VOL'.*@'$GREPSNAP > $WORKLIST
+      CHECK=$(cat $CHECKLIST $WORKLIST | sort | uniq -d)
+      if [ -n "$CHECK" ]; then
+        debug "checks: snapshots en trop a la fin: $CHECK"
+      fi
+      say "done :)"
     fi
-    say "done :)"
   fi
 fi
-rm $FULLLIST $WORKLIST $TODELLIST $CHECKLIST
+rm -f $FULLLIST $WORKLIST $TODELLIST $CHECKLIST
