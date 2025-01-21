@@ -62,7 +62,7 @@ for arg in $*; do
   vol=$(zfs list -H -oname $arg)
   if [ -z "$vol" ]; then
     echo "Pas de volume trouve pour $arg" >&2
-    continue
+    exit 1
   fi
   if /sbin/zfs list -H -t filesystem,volume $vol > /dev/null; then
     /sbin/zfs snapshot ${ZFSSNAPRECURSE:+"-r"} $vol@$SNAPNAME
