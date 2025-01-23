@@ -59,9 +59,7 @@ if ! ( echo $1 | egrep '^([[:digit:]]+l)?([[:digit:]]+h)?([[:digit:]]+d)?([[:dig
 fi
 
 getsnapdate() {
-  ZTIME=$(LC_TIME=C zfs list -H -o creation $1| cut -c 1-21 2>/dev/null)
-  [ -z "$ZTIME" ] && return 1
-  LC_TIME=C date -jnu -f '%a %b %e %R %Y' +%s "$(LC_TIME=C zfs list -H -o creation $1| cut -c 1-21)"
+  zfs list -H -po creation $1
 }
 say() {
   if [ -z "$CLEANSNAP_FAKE" ]; then
