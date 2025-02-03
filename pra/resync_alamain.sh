@@ -91,7 +91,9 @@ if [ $errcount -eq 0 ]; then
   elif [ "$lastsrc" != "$lastdst" ]; then
     there zfs send -I"${lastdst#$zfs}" "$lastsrc" | here "mbuffer -q | zfs receive -vF $zfs" || exiterror "PB a la synchro finale"
   fi 
-  there "zfs set lastpra:$(hostname -s)=${lastsrc#$zfs@} $zfs"
+  lastsrcsnap=${lastsrc#$zfs@}
+  lastsnaptime=${lastsrcsnap##*-}
+  there "zfs set lastpra:$(hostname -s)=${lastsrc#$zfs@} $zfs && echo $lastsnaptime > zfs_sent_$(echo $zfs | sed 's@/@_@g')-$(hostname -s)"
 
   echo "re-enable cron"
   crontab -l | sed 's@^#\([0-9].*sync_zfs_pra_from.sh .* '$zfs'\)$@\1@' | crontab -
