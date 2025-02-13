@@ -28,6 +28,8 @@ DSTHOST=${DST%%:*}
 [ "$DSTHOST" = "$DST" ] && DSTHOST=$(hostname -s)
 DSTVOL=${DST#*:}
 
+[ -d /var/log/zfs_pra ] || mkdir -p -m 700 /var/log/zfs_pra
+
 if [ -n "$KEEPEXPR" ]; then
   SNAPSCRIPT=${SNAPSCRIPT:-$(realpath $(dirname $0))/../zfs_snap_make}
   [ -x "$SNAPSCRIPT" ] || exit_on_error "Snapscript $SNAPSCRIPT introuvable"
@@ -38,14 +40,14 @@ do_on_srchost() {
 }
 
 loggue() {
-  echo "$(date) [$$] $*" > /var/log/$LOGNAME.log
+  echo "$(date) [$$] $*" > /var/log/zfs_pra/${LOGNAME}.log
 }
 
 exit_on_error() {
   echo $* >&2
   loggue $*
-  tail /var/log/$LOGNAME.log >&2
-  tail /var/log/$LOGNAME.log | mail -s "Erreur $0 $*" sysadm@ec-m.fr
+  tail /var/log/zfs_pra/${LOGNAME}.log >&2
+  tail /var/log/zfs_pra/${LOGNAME}.log | mail -s "Erreur $0 $*" sysadm@ec-m.fr
   exit 1
 }
 
@@ -53,13 +55,13 @@ srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | cut -d' ' -f1)
 
 SRCZFS=$SVOL
 loggue "$SRCHOST:$SRCVOL -> $DSTVOL"
-do_on_srchost $DSTHOST $SRCVOL send | mbuffer -q | zfs receive -F $DSTVOL >> /var/log/$LOGNAME.log 2>&1
+do_on_srchost $DSTHOST $SRCVOL send | mbuffer -q | zfs receive -F $DSTVOL >> /var/log/zfs_pra/${LOGNAME}.log 2>&1
 endcode=$?
 FAILED=""
 if [ $endcode -gt 0 ]; then
-  echo "$(date): $SRCHOST:$SRCVOL@$last returns $endcode : checking" >> /var/log/$LOGNAME.log
   last=$(do_on_srchost $DSTHOST $SRCVOL last)
   [ -z "$last" ] && exit_on_error "pas de last ??? comprend rien"
+  logue "$SRCHOST:$SRCVOL@$last returns $endcode : checking"
   for fs in $(zfs list -Honame -r $DSTVOL); do
     zfs list $fs@$last > /dev/null || FAILED="$fs $FAILED"
   done
@@ -69,7 +71,7 @@ if [ $endcode -gt 0 ]; then
     LASTOK=$(do_on_srchost $DSTHOST $SRCVOL failed)
     if [ "$LASTOK" != "-" ]; then
       loggue "zfs rollback to $DSTVOL@$LASTOK"
-      zfs rollback -r "$DSTVOL@$LASTOK" >> /var/log/$LOGNAME.log 2>&1
+      zfs rollback -r "$DSTVOL@$LASTOK" >> /var/log/zfs_pra/${LOGNAME}.log 2>&1
     fi
     exit_on_error "FAILED with @$last: $FAILED"
   fi

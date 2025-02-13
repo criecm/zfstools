@@ -27,8 +27,17 @@ fi
 [ -z "$to" ] || [ -z "$zfs_fs" ] && exit 1
 zfs_fs="$(zfs list -Honame "$zfs_fs")"
 
+[ -d /var/log/zfs_pra ] || mkdir -p -m 700 /var/log/zfs_pra
 trace="/var/db/zfs_sent_$(echo "$zfs_fs" | sed 's/\//_/g')-${to}"
+mylog="/var/log/zfs_pra/sent_$(echo "$zfs_fs" | sed 's/\//_/g')-${to}"
+mypid=$$
 from="$(hostname -s)"
+
+logue() {
+  echo "$(date) send_zfs_pra[${mypid}] $@" >> ${mylog}
+}
+
+logue "$SSH_ORIGINAL_COMMAND"
 
 case "$command" in
   received)
@@ -39,21 +48,21 @@ case "$command" in
     fi
     last=$(zfs get -Hovalue lastpra:$to "$zfs_fs")
     if ! [ "$last" = "-" ]; then
-      logger -p local4.info "zfs destroy -r ${zfs_fs}@${last}"
+      logue "zfs destroy -r ${zfs_fs}@${last}"
       zfs destroy -r "${zfs_fs}@${last}"
     fi
-    logger -p local4.info "zfs set lastpra:${to}=${from}-${to}-${now} $zfs_fs"
+    logue "zfs set lastpra:${to}=${from}-${to}-${now} $zfs_fs"
     zfs set "lastpra:$to"="$from-$to-$now" "$zfs_fs"
     echo "${from}-${to}-${now}"
     rm "$trace"
     # menage
     if [ "$(date +%u)" -eq 0 ] && [ "$(date +%H)" -lt 2 ]; then
       for snap in $(zfs list -r -Honame -t snapshot -d 1 "$zfs_fs" | grep "${zfs_fs}@${from}-${to}-" | grep -v "${zfs_fs}@${from}-${to}-${now}"); do
-        logger -p local4.info "zfs destroy -r $snap (menage)"
-        zfs destroy -rd "$snap"
+        logue "zfs destroy -r $snap (menage)"
+        zfs destroy -rd "$snap" 2| tee -a ${mylog}
       done
       if [ "$(zfs get -s local -H -ovalue lastbackup:$to $zfs_fs)" != "-" ]; then
-        logger -p local4.info "zfs inherit lastbackup:$to $zfs_fs (menage)"
+        logue "zfs inherit lastbackup:$to $zfs_fs (menage)"
         zfs inherit "lastbackup:${to}" "${zfs_fs}"
       fi
     fi
@@ -66,7 +75,7 @@ case "$command" in
       exit 1
     fi
     last=$(zfs get -Hovalue lastpra:$to "$zfs_fs")
-    logger -p local4.warn "failed: zfs destroy -r ${zfs_fs}@${from}-${to}-${now}"
+    logue "WARN: zfs destroy -r ${zfs_fs}@${from}-${to}-${now}"
     zfs destroy -r "${zfs_fs}@${from}-${to}-${now}"
     rm -f "$trace"
     echo "${last}"
@@ -84,7 +93,7 @@ case "$command" in
     zfs_fs=$(zfs list -Honame $zfs_fs)
     [ -n "$zfs_fs" ] || exit 1
     now=$(date +%s)
-    logger -p local4.info "zfs snapshot $zfs_fs@$from-$to-$now"
+    logue "zfs snapshot $zfs_fs@$from-$to-$now"
     zfs snapshot -r "$zfs_fs@$from-$to-$now"
     lastsnap=$(zfs get -H -ovalue "lastpra:$to" "$zfs_fs" 2>/dev/null)
     if [ "$lastsnap" = "-" ]; then
@@ -93,11 +102,11 @@ case "$command" in
     fi
     if ! [ "$lastsnap" = "-" ]; then
       # si on a un last, on l'utilise
-      logger -p local4.info "zfs send -RI @${lastsnap} ${zfs_fs}@${from}-${to}-${now}"
+      logue "zfs send -RI @${lastsnap} ${zfs_fs}@${from}-${to}-${now}"
       zfs send -RI "@${lastsnap}" "${zfs_fs}@${from}-${to}-${now}"
     else
       # sinon on envoie tout
-      logger -p local4.info "zfs send ${zfs_fs}@${from}-${to}-${now}"
+      logue "zfs send ${zfs_fs}@${from}-${to}-${now}"
       zfs send -R "${zfs_fs}@${from}-${to}-${now}"
     fi
     echo "$now" > "$trace"
