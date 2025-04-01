@@ -174,7 +174,7 @@ cleanupvol() {
           LASTHOUR=$ts
           KEEPIT=$KEEPIT" hourly"
           NBHOURS=$(($NBHOURS - 1))
-        elif [ $ts -ge $(date -ju -f %s -v +55M +%s $LASTHOUR) ]; then
+        elif [ $ts -ge $(date -ju -f %s -v +56M +%s $LASTHOUR) ]; then
           LASTHOUR=$ts
           KEEPIT=$KEEPIT" hourly"
           NBHOURS=$(($NBHOURS - 1))
@@ -188,7 +188,7 @@ cleanupvol() {
           LASTDAY=$ts
           KEEPIT=$KEEPIT" daily"
           NBDAYS=$(($NBDAYS - 1))
-        elif [ $ts -ge $(date -ju -f %s -v +23H +%s $LASTDAY) ]; then
+        elif [ $ts -ge $(date -ju -f %s -v +24H -v -4M +%s $LASTDAY) ]; then
           LASTDAY=$ts
           KEEPIT=$KEEPIT" daily"
           NBDAYS=$(($NBDAYS - 1))
@@ -202,7 +202,7 @@ cleanupvol() {
           LASTWEEK=$ts
           KEEPIT=$KEEPIT" weekly"
           NBWEEKS=$(($NBWEEKS - 1))
-        elif [ $ts -ge $(date -ju -f %s -v +166H +%s $LASTWEEK) ]; then
+        elif [ $ts -ge $(date -ju -f %s -v +1w -v -5M +%s $LASTWEEK) ]; then
           LASTWEEK=$ts
           KEEPIT=$KEEPIT" weekly"
           NBWEEKS=$(($NBWEEKS - 1))
@@ -216,7 +216,7 @@ cleanupvol() {
           LASTMONTH=$ts
           KEEPIT=$KEEPIT" monthly"
           NBMONTHS=$(($NBMONTHS - 1))
-        elif [ $ts -ge $(date -ju -f %s -v +30d +%s $LASTMONTH) ]; then
+        elif [ $ts -ge $(date -ju -f %s -v +1m -v -5M +%s $LASTMONTH) ]; then
           LASTMONTH=$ts
           KEEPIT=$KEEPIT" monthly"
           NBMONTHS=$(($NBMONTHS - 1))
@@ -230,7 +230,7 @@ cleanupvol() {
           LASTYEAR=$ts
           KEEPIT=$KEEPIT" yearly"
           NBYEARS=$(($NBYEARS - 1))
-        elif [ $ts -ge $(date -ju -f %s -v +364d +%s $LASTYEAR) ]; then
+        elif [ $ts -ge $(date -ju -f %s -v +1y -v -1H +%s $LASTYEAR) ]; then
           LASTYEAR=$ts
           KEEPIT=$KEEPIT" yearly"
           NBYEARS=$(($NBYEARS - 1))
