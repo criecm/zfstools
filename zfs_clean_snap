@@ -174,7 +174,7 @@ cleanupvol() {
           LASTHOUR=$ts
           KEEPIT=$KEEPIT" hourly"
           NBHOURS=$(($NBHOURS - 1))
-        elif [ $ts -ge $(date -ju -f %s -v +56M +%s $LASTHOUR) ]; then
+        elif [ $ts -ge $(date -ju -f %s -v +1H -v -3M +%s $LASTHOUR) ]; then
           LASTHOUR=$ts
           KEEPIT=$KEEPIT" hourly"
           NBHOURS=$(($NBHOURS - 1))
