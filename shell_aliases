@@ -21,6 +21,7 @@ recv_zfs () {
 	if [ $# -ne 1 ]; then
 		echo "usage: recv_zfs zfs/path [port]"
 		echo
+		return 1
 	fi
 	zfs=$1
 	mbuffer -I${2:-9999} | zfs receive -F ${zfs}
