@@ -1,0 +1,27 @@
+
+send_zfs_from_bookmark () {
+	if [ $# -lt 2 ]; then
+		echo "usage: send_zfs_int_from_bookmark zfs/path dest_machine [port]"
+		echo
+		echo "Needs a bookmark AND 'mbuffer -I9999 | zfs receive' on dest_machine"
+		return 1
+	fi
+        zfs=$1 
+        to=$2 
+        zfs list -Honame $zfs > /dev/null || return 1
+        zfs list -Honame -t bookmark ${zfs}'#to_'${to} > /dev/null || return 1
+        D=$(date +%s) 
+        S="$(hostname -s)-${2%%.*}-${D}" 
+        zfs list -Honame -t snapshot "${zfs}@${S}" > /dev/null 2>&1 || zfs snapshot "${zfs}@${S}"
+        zfs send -i"#to_${to}" "${zfs}@${S}" | mbuffer -O ${to}:${3:-9999} || return 1
+        zfs destroy "${zfs}#to_${to}" && zfs bookmark "${zfs}@${S}" "${zfs}#to_${to}" && zfs destroy "${zfs}@${S}"
+}
+
+recv_zfs () {
+	if [ $# -ne 1 ]; then
+		echo "usage: recv_zfs zfs/path [port]"
+		echo
+	fi
+	zfs=$1
+	mbuffer -I${2:-9999} | zfs receive -F ${zfs}
+}
