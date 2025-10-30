@@ -19,6 +19,11 @@ fi
 
 for j in $(iocage list -h | cut -w -f2); do
   if jls -v | grep -q 'ioc-'$j' *ACTIVE'; then
-    [ $(iocage get -h jail_zfs $j) -eq 0 ] && $zfs_snap_script -r -c $KEEPEXPR -q "$iocage_fs/$j"
+    if [ $(iocage get -h jail_zfs $j) -eq 0 ]; then
+      $zfs_snap_script -r -c $KEEPEXPR -q "$iocage_fs/$j"
+    else
+      # on a un jail qui gere ses zfs: on ne snapshot que la racine
+      $zfs_snap_script -c $KEEPEXPR -q "$iocage_fs/$j/root"
+    fi
   fi
 done
