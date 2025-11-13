@@ -53,6 +53,10 @@ logue_error() {
   tail /var/log/$LOGNAME.log >&2
 }
 
+if service samba_server enabled; then
+    service samba_server stop  >/dev/null 2>&1
+fi
+
 srcname=$(do_on_srchost $DSTHOST connect | cut -d' ' -f2)
 
 NBERRS=0
@@ -116,3 +120,7 @@ ssh -oIdentitiesOnly=yes -oBatchMode=yes -ax -oControlMaster=auto -oControlPath=
 
 # snapshot dest
 [ ! -z "$KEEPEXPR" ] && $SNAPSCRIPT -r -c $KEEPEXPR $DSTVOL >> /var/log/$LOGNAME.log
+
+if service samba_server enabled; then
+    service samba_server start  >/dev/null 2>&1
+fi
