@@ -55,6 +55,9 @@ srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | cut -d' ' -f1)
 
 SRCZFS=$SVOL
 loggue "$SRCHOST:$SRCVOL -> $DSTVOL"
+if ! do_on_srchost $DSTHOST $SRCVOL health >> /var/log/zfs_pra/${LOGNAME}.log 2>&1; then
+  exit_on_error "do_on_srchost $DSTHOST $SRCVOL health returns $?"
+fi
 do_on_srchost $DSTHOST $SRCVOL send | mbuffer -q | zfs receive -F $DSTVOL >> /var/log/zfs_pra/${LOGNAME}.log 2>&1
 endcode=$?
 FAILED=""
