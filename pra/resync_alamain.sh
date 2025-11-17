@@ -9,8 +9,8 @@ usage() {
   exiterror "usage: $0 sourcehost:zfs [dstzfs]"
 }
 
-srczfs=${1#:*}
-sourcehost=${1%*:}
+srczfs=${1#*:}
+sourcehost=${1%:*}
 dstzfs=${2:-$srczfs}
 
 if [ $# -lt 1 ] || [ $# -gt 2 ] || [ -z "$srczfs" ] || [ -z "$sourcehost" ] || [ "$srczfs" = "$sourcehost" ]; then
