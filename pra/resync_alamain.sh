@@ -58,7 +58,7 @@ lastvalidsnap=$(there zfs get -Hovalue lastpra:$(hostname -s) "$srczfs")
 # evite un grep d'une chaine vide plus bas
 [ -z "${lastvalidsnap}" ] && lastvalidsnap="nEXISTEpasNULLEpart"
 # boucle pour chaque zfs enfant
-for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${srczfs}##;"); do
+for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${srczfs}/##;"); do
   lastdsthere=$(grep "^${dstzfs}/${fs}@${snaphead}" "$LISTDST" | cut -f1 | tail -1 | cut -d@ -f2)
   if [ -n "${lastdsthere}" ]; then
     last_on_dest=$(grep "^${srczfs}/${fs}@${lastdsthere}[[:space:]]" "$LISTSRC" | cut -f1 | cut -d@ -f2)
