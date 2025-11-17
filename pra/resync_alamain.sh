@@ -40,31 +40,41 @@ errcount=0
 errwith=""
 lastsrcsnap=$(there zfs list -Honame -t snapshot -s creation -r -d1 "$zfs" | grep @${snaphead} | tail -1 | sed 's/^.*@//')
 lastvalidsnap=$(there zfs get -Hovalue lastpra:$(hostname -s) "$zfs")
-for fs in $(sed 's/@.*//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
+# boucle pour chaque zfs enfant
+for fs in $(sed 's/@.*$//' "$LISTSRC" | grep -v "${zfs}$" | sort -u); do
   lastdsthere=$(grep "^$fs@${snaphead}" "$LISTDST" | tail -1)
   if [ -n "${lastdsthere}" ]; then
-    lasthere=$(grep "^$lastdsthere$" "$LISTSRC")
+    last_on_dest=$(grep "^$lastdsthere$" "$LISTSRC")
   else
-    lasthere=""
+    last_on_dest=""
   fi
-  if [ -z "${lasthere}" ]; then
+  if [ -z "${last_on_dest}" ]; then
+  # source doesn't have the last received sync snapshot
+    # search for last common one
     for snap in $(grep "^$fs@" "$LISTDST"); do
-      grep -q "^${snap}$" "$LISTSRC" && lasthere=${snap}
+      grep -q "^${snap}$" "$LISTSRC" && last_on_dest=${snap}
     done
-    [ -z "${lasthere}" ] && echo "no sync snap for $fs"
+    # destroy $fs on dest if no common snapshot on dest
+    if [ -z "${last_on_dest}" ]; then
+      echo "no sync snap for $fs: destroy $fs"
+      here zfs destroy -r "$fs"
+    fi
   fi
-  [ -n "$lasthere" ] && [ "$(grep "^$fs@" "$LISTDST" | tail -1)" != "$lasthere" ] && here zfs rollback -r "$lasthere"
-  lastthere=$(fgrep $fs@$lastsrcsnap "$LISTSRC" | tail -1)
-  [ -z "$lastthere" ] && continue
-  if [ -n "$lasthere" ] && [ "$lasthere" != "$lastthere" ]; then
+  # rollback to last common
+  [ -n "$last_on_dest" ] && [ "$(grep "^$fs@" "$LISTDST" | tail -1)" != "$last_on_dest" ] && here zfs rollback -r "$last_on_dest"
+  last_on_src=$(fgrep $fs@$lastsrcsnap "$LISTSRC" | tail -1)
+  [ -z "$last_on_src" ] && continue
+  if [ -n "$last_on_dest" ] && [ "$last_on_dest" != "$last_on_src" ]; then
     # suppression des snapshots de synchro intermediaires inutiles avant synchro
-    there "zfs list -Honame -tsnapshot -r -d1 $fs | grep '$fs@$snaphead' | egrep -v '($lasthere|$lastthere)' | xargs -L1 zfs destroy -d"
-    if ! there zfs send -R ${lasthere:+"-I${lasthere#$fs}"} "$lastthere" | here "mbuffer -q | zfs receive -vF $fs"; then
+    there "zfs list -Honame -tsnapshot -r -d1 $fs | grep '$fs@$snaphead' | egrep -v '($last_on_dest|$last_on_src|$lastvalidsnap)' | xargs -L1 zfs destroy -d"
+    # synchro vers $lastsrcsnap, incrémental si possible
+    if ! there zfs send -R ${last_on_dest:+"-I${last_on_dest#$fs}"} "$last_on_src" | here "mbuffer -q | zfs receive -vF $fs"; then
       errcount=$(( errcount + 1 ))
       errwith="$fs\n$errwith"
     fi
   fi
 done
+
 if [ $errcount -eq 0 ]; then
   lastdst=$(zfs list -Honame -t snapshot -s creation -r -d1 "$zfs" | grep @${snaphead} | tail -1)
   there "zfs list -r -d1 -t snapshot -Honame $zfs" > "$LISTSRC"
