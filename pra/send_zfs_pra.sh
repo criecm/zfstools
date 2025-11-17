@@ -4,7 +4,7 @@
 # DOIT être déclenché par une "command" de cle ssh
 #
 # arguments (dans $SSH_ORIGINAL_COMMAND):
-#    dsthost srcvol [send|list|received]
+#    dsthost srcvol [health|send|last|received]
 #    dsthost connect
 #
 if [ -n "$SSH_ORIGINAL_COMMAND" ]; then
@@ -40,6 +40,20 @@ logue() {
 logue "$SSH_ORIGINAL_COMMAND"
 
 case "$command" in
+  health)
+    lasttrace=$(cat "$trace" 2>/dev/null || echo -n "")
+    lastsync=$(get -s local -H -ovalue lastbackup:$to $zfs_fs || echo "new")
+    if [ -n "$lasttrace" ]; then
+      if [ "${from}-${to}-${lasttrace}" = "${lastsync}" ];
+        rm "${trace}"
+      elif [ "${lastsync}" != "new" ]; then
+        echo "trace ${lasttrace} differs from lastsync ${lastsync}"
+        exit 1
+      fi
+    fi
+    echo "$lastsync"
+    exit 0
+  ;;
   received)
     now=$(cat "$trace")
     if [ -z "$now" ]; then
