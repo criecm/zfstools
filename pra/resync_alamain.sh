@@ -88,12 +88,12 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
     # suppression des snapshots de synchro intermediaires inutiles avant synchro
     echo " * delete needless sync snapshots on ${sourcehost}:${srczfs}/${fs}"
     there "zfs list -Honame -tsnapshot ${srczfs}/${fs} | grep '${srczfs}/${fs}@$snaphead' | grep -Ev '@($last_on_dest|$last_on_src|$lastvalidsnap)' | xargs -tL1 zfs destroy -d"
-    # synchro vers $lastsrcsnap, incrémental si possible
-    echo " * sync ${srczfs}/${fs}@${last_on_src} ${last_on_dest:+"(inc from @${last_on_dest})"} to ${dstzfs}/${fs}"
-    if ! there zfs send -R ${last_on_dest:+"-I@${last_on_dest}"} "${srczfs}/${fs}@${last_on_src}" | here "mbuffer -q | zfs receive -vF ${dstzfs}/${fs}"; then
-      errcount=$(( errcount + 1 ))
-      errwith="${fs}\n$errwith"
-    fi
+  fi
+  # synchro vers $lastsrcsnap, incrémental si possible
+  echo " * sync ${srczfs}/${fs}@${last_on_src} ${last_on_dest:+"(inc from @${last_on_dest})"} to ${dstzfs}/${fs}"
+  if ! there zfs send -R ${last_on_dest:+"-I@${last_on_dest}"} "${srczfs}/${fs}@${last_on_src}" | here "mbuffer -q | zfs receive -vF ${dstzfs}/${fs}"; then
+    errcount=$(( errcount + 1 ))
+    errwith="${fs}\n$errwith"
   fi
 done
 
