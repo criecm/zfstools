@@ -74,6 +74,7 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
     if [ -z "${last_on_dest}" ]; then
       echo " * no sync snap for ${dstzfs}/${fs}: destroy $fs"
       here zfs destroy -r "${dstzfs}/${fs}"
+      RESYNC=${fs}
     fi
   fi
   if [ -n "${last_on_dest}" ] && [ "$(grep "^${dstzfs}/${fs}@" "${LISTDST}" | tail -1 | cut -f1)" != "${last_on_dest}" ]; then
@@ -86,7 +87,7 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
     echo " * no snap ${srczfs}/${fs}@${lastsrcsnap}, skip (is it new)"
     continue
   fi
-  if [ -n "${last_on_dest}" ]; then
+  if [ -n "${last_on_dest}" ] || [ "x$RESYNC" = "x${fs}" ]; then
       # suppression des snapshots de synchro intermediaires inutiles avant synchro
       echo " * delete needless sync snapshots on ${sourcehost}:${srczfs}/${fs}"
       there "zfs list -Honame -tsnapshot ${srczfs}/${fs} | grep '${srczfs}/${fs}@$snaphead' | grep -Ev '@($last_on_dest|$last_on_src|$lastvalidsnap)' | xargs -L1 zfs destroy -d"
