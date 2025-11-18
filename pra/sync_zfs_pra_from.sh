@@ -40,7 +40,7 @@ do_on_srchost() {
 }
 
 loggue() {
-  echo "$(date) [$$] $*" > /var/log/zfs_pra/${LOGNAME}.log
+  echo "$(date) [$$] $*" >> /var/log/zfs_pra/${LOGNAME}.log
 }
 
 exit_on_error() {
