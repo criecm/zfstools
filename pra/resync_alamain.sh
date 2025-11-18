@@ -60,10 +60,9 @@ lastvalidsnap=$(there zfs get -Hovalue lastpra:$(hostname -s) "$srczfs")
 # boucle pour chaque zfs enfant
 for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${srczfs}/##;"); do
   lastdsthere=$(grep "^${dstzfs}/${fs}@${snaphead}" "$LISTDST" | cut -f1 | tail -1 | cut -d@ -f2)
+  last_on_dest=""
   if [ -n "${lastdsthere}" ]; then
     last_on_dest=$(grep "^${srczfs}/${fs}@${lastdsthere}[[:space:]]" "$LISTSRC" | cut -f1 | cut -d@ -f2)
-  else
-    last_on_dest=""
   fi
   if [ -z "${last_on_dest}" ]; then
   # source doesn't have the last received sync snapshot
@@ -83,17 +82,25 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
     here zfs rollback -r "${dstzfs}/${fs}@${last_on_dest}"
   fi
   last_on_src=$(fgrep "${srczfs}/${fs}@${lastsrcsnap}" "${LISTSRC}" | tail -1 | cut -f1 | cut -d@ -f2)
-  [ -z "${last_on_src}" ] && continue
-  if [ -n "${last_on_dest}" ] && [ "${last_on_dest}" != "${last_on_src}" ]; then
-    # suppression des snapshots de synchro intermediaires inutiles avant synchro
-    echo " * delete needless sync snapshots on ${sourcehost}:${srczfs}/${fs}"
-    there "zfs list -Honame -tsnapshot ${srczfs}/${fs} | grep '${srczfs}/${fs}@$snaphead' | grep -Ev '@($last_on_dest|$last_on_src|$lastvalidsnap)' | xargs -tL1 zfs destroy -d"
+  if [ -z "${last_on_src}" ]; then
+    echo " * no snap ${srczfs}/${fs}@${lastsrcsnap}, skip (is it new)"
+    continue
   fi
-  # synchro vers $lastsrcsnap, incrémental si possible
-  echo " * sync ${srczfs}/${fs}@${last_on_src} ${last_on_dest:+"(inc from @${last_on_dest})"} to ${dstzfs}/${fs}"
-  if ! there zfs send -R ${last_on_dest:+"-I@${last_on_dest}"} "${srczfs}/${fs}@${last_on_src}" | here "mbuffer -q | zfs receive -vF ${dstzfs}/${fs}"; then
-    errcount=$(( errcount + 1 ))
-    errwith="${fs}\n$errwith"
+  if [ -n "${last_on_dest}" ]; then
+      # suppression des snapshots de synchro intermediaires inutiles avant synchro
+      echo " * delete needless sync snapshots on ${sourcehost}:${srczfs}/${fs}"
+      there "zfs list -Honame -tsnapshot ${srczfs}/${fs} | grep '${srczfs}/${fs}@$snaphead' | grep -Ev '@($last_on_dest|$last_on_src|$lastvalidsnap)' | xargs -L1 zfs destroy -d"
+  fi
+  if [ "${last_on_dest}" != "${last_on_src}" ]; then
+    # synchro vers $lastsrcsnap, incrémental si possible
+    echo " * sync ${srczfs}/${fs}@${last_on_src} ${last_on_dest:+"(inc from @${last_on_dest})"} to ${dstzfs}/${fs}"
+    if ! there zfs send -R ${last_on_dest:+"-I@${last_on_dest}"} "${srczfs}/${fs}@${last_on_src}" | here "mbuffer -q | zfs receive -vF ${dstzfs}/${fs}"; then
+      errcount=$(( errcount + 1 ))
+      errwith="${fs}\n$errwith"
+    fi
+  else
+    # si on a deja le snap, au suivant
+    continue
   fi
 done
 
@@ -124,8 +131,10 @@ if [ $errcount -eq 0 ]; then
     echo "Erreur avec $srczfs: $lastsrcsnap a disparu !" >&2
     exit 1
   fi
-  # suppression des snapshots de synchro intermediaires inutiles
-  there "zfs list -Honame -tsnapshot -r -d1 ${srczfs} | grep '^${srczfs}@${snaphead}' | grep -Ev '${srczfs}@(${lastsrc}|${lastdst}|${lastvalidsnap})' | xargs -t -L1 zfs destroy -d"
+  if grep '^${srczfs}@${snaphead}' "$LISTSRC" | grep -qEv '${srczfs}@(${lastsrc}|${lastdst}|${lastvalidsnap})'; then
+    # suppression des snapshots de synchro intermediaires inutiles
+    there "zfs list -Honame -tsnapshot -r -d1 ${srczfs} | grep '^${srczfs}@${snaphead}' | grep -Ev '${srczfs}@(${lastsrc}|${lastdst}|${lastvalidsnap})' | xargs -t -L1 zfs destroy -d"
+  fi
   if zfs list ${dstzfs}@${lastsrc} > /dev/null 2>&1; then
     zfs rollback -r ${dstzfs}@${lastsrc}
   elif [ "${lastsrc}" != "${lastdst}" ]; then
@@ -134,6 +143,9 @@ if [ $errcount -eq 0 ]; then
   lastsrcsnap=${lastsrc}
   lastsnaptime=${lastsrcsnap##*-}
   there "zfs set lastpra:$(hostname -s)=${lastsrc} ${srczfs} && echo ${lastsnaptime} > zfs_sent_$(echo $srczfs | sed 's@/@_@g')-$(hostname -s)"
+
+  # rm trace
+  there "rm /var/db/zfs_sent_$(echo "$srczfs" | sed 's/\//_/g')-$(hostname -s)"
 
   echo "re-enable cron"
   crontab -l | sed 's@^#\([0-9].*sync_zfs_pra_from.sh .* '$dstzfs'\)$@\1@' | crontab -
