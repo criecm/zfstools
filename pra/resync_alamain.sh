@@ -88,9 +88,11 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
     continue
   fi
   if [ -n "${last_on_dest}" ] || [ "x$RESYNC" = "x${fs}" ]; then
+    if grep '${srczfs}/${fs}@$snaphead' "${LISTSRC}" | grep -qEv '@($last_on_dest|$last_on_src|$lastvalidsnap)'; then
       # suppression des snapshots de synchro intermediaires inutiles avant synchro
       echo " * delete needless sync snapshots on ${sourcehost}:${srczfs}/${fs}"
       there "zfs list -Honame -tsnapshot ${srczfs}/${fs} | grep '${srczfs}/${fs}@$snaphead' | grep -Ev '@($last_on_dest|$last_on_src|$lastvalidsnap)' | xargs -L1 zfs destroy -d"
+    fi
   fi
   if [ "${last_on_dest}" != "${last_on_src}" ]; then
     # synchro vers $lastsrcsnap, incrémental si possible
