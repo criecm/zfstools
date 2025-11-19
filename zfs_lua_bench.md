@@ -27,6 +27,8 @@ All tests have been run on two different hosts:
   * 2000x3 on a workstation with 2 4T sata drives mirror and cache/log on a single customer-grade ssd
   * 1000x4 on a server with a 10x2T sas raidz-2, cache on two enterprise-grade ssd and log on a two ssd mirror
 
+FreeBSD 14.3p5 amd64
+
 ### prepare
 create dataset hierarchy and take 1000 or 2000 snapshots with real data difference
 
@@ -52,9 +54,9 @@ destroy recursively all `@test-[0-9][0-9][0-9][0-9]` snapshots BUT keeping all `
 ```shell
 # echo "zfs list -r -tsnap -Honame zdata/test | grep '@test-[0-9]\{4\}' | grep -v '@test-[0-9][0-9]34' | xargs -L1 zfs destroy" | time sh
 ```
-with 2000 snapshots on zdata/test/{un,deux}:
+* with 2000 snapshots on zdata/test/{un,deux}:
     15.23s user 38.87s system 2% cpu 40:23.83 total
-with 1000 snapshots on zdata/test/{un,deux,trois}:
+* with 1000 snapshots on zdata/test/{un,deux,trois}:
     21.70s user 70.33s system 2% cpu 1:06:10.76 total
 
 #### shell + zfs destroy -r
@@ -62,9 +64,9 @@ this method is quicker but less safe: it may let some sub-filesystem snapshots a
 ```shell
 # echo "zfs list -tsnap -Honame zdata/test | grep '@test-[0-9]\{4\}' | grep -v '@test-[0-9][0-9]34' | xargs -L1 zfs destroy -r" | time sh
 ```
-with 2000 snapshots on zdata/test/{un,deux}:
+* with 2000 snapshots on zdata/test/{un,deux}:
     5.73s user 14.99s system 2% cpu 16:10.54 total
-with 1000 snapshots on zdata/test/{un,deux,trois}:
+* with 1000 snapshots on zdata/test/{un,deux,trois}:
     5.81s user 20.07s system 2% cpu 16:23.13 total
 
 #### zfs program lua
@@ -109,7 +111,7 @@ return results
 # time zfs program zdata /root/destroysnapselect.lua zdata/test test%-%d%d%d%d test%-%d%d34
 ```
 
-with 2000 snapshots on zdata/test/{un,deux}:
+* with 2000 snapshots on zdata/test/{un,deux}:
     0.01s user 0.02s system 0% cpu 23.667 total
-with 1000 snapshots on zdata/test/{un,deux,trois}:
+* with 1000 snapshots on zdata/test/{un,deux,trois}:
     0.01s user 0.04s system 0% cpu 16.085 total
