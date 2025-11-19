@@ -52,7 +52,7 @@ destroy recursively all `@test-[0-9][0-9][0-9][0-9]` snapshots BUT keeping all `
 
 #### shell + zfs destroy
 ```shell
-# echo "zfs list -r -tsnap -Honame zdata/test | grep '@test-[0-9]\{4\}' | grep -v '@test-[0-9][0-9]34' | xargs -L1 zfs destroy" | time sh
+echo "zfs list -r -tsnap -Honame zdata/test | grep '@test-[0-9]\{4\}' | grep -v '@test-[0-9][0-9]34' | xargs -L1 zfs destroy" | time sh
 ```
 * with 2000 snapshots on zdata/test/{un,deux}:
     15.23s user 38.87s system 2% cpu 40:23.83 total
@@ -62,7 +62,7 @@ destroy recursively all `@test-[0-9][0-9][0-9][0-9]` snapshots BUT keeping all `
 #### shell + zfs destroy -r
 this method is quicker but less safe: it may let some sub-filesystem snapshots alone if the same snap doesn't exist on the parent
 ```shell
-# echo "zfs list -tsnap -Honame zdata/test | grep '@test-[0-9]\{4\}' | grep -v '@test-[0-9][0-9]34' | xargs -L1 zfs destroy -r" | time sh
+echo "zfs list -tsnap -Honame zdata/test | grep '@test-[0-9]\{4\}' | grep -v '@test-[0-9][0-9]34' | xargs -L1 zfs destroy -r" | time sh
 ```
 * with 2000 snapshots on zdata/test/{un,deux}:
     5.73s user 14.99s system 2% cpu 16:10.54 total
@@ -108,7 +108,7 @@ results["failed"] = failed
 return results
 ```
 ```shell
-# time zfs program zdata /root/destroysnapselect.lua zdata/test test%-%d%d%d%d test%-%d%d34
+time zfs program zdata /root/destroysnapselect.lua zdata/test test%-%d%d%d%d test%-%d%d34
 ```
 
 * with 2000 snapshots on zdata/test/{un,deux}:
