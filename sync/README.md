@@ -2,6 +2,8 @@
 
 * La synchro est initialisée depuis la destination, avec une cle ssh dédiée
 * La source doit accepter cette cle ssh avec `command=".../send_zfs.sh"` dans /root/.ssh/authorized_keys
+* Action pre/post synchro: un script `/root/sync_zfs_actions.zdata_vol.sh`, s'il existe,
+  sera lancé avec l'argument "before" avant la synchro et avec "after" apres la synchro
 
 ## howto
 
