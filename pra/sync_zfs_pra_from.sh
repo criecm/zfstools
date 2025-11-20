@@ -51,7 +51,9 @@ exit_on_error() {
   exit 1
 }
 
-srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | cut -d' ' -f1)
+srcname=$(do_on_srchost $DSTHOST $SRCVOL connect | grep " ok$" | cut -d' ' -f1)
+
+[ -z "$srcname" ] && exit_on_error "$SRCHOST does not reply ok to connect ($srcname)"
 
 SRCZFS=$SVOL
 loggue "$SRCHOST:$SRCVOL -> $DSTVOL"
