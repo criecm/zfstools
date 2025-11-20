@@ -97,7 +97,7 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
     if grep "${srczfs}/${fs}@$snaphead" "${LISTSRC}" | grep -qEv "@($last_on_dest|$last_on_src|$lastvalidsnap)"; then
       # suppression des snapshots de synchro intermediaires inutiles avant synchro
       echo " * delete needless sync snapshots on ${sourcehost}:${srczfs}/${fs}"
-      there "zfs program ${srczfs%%/*} /tmp/delsnapsmatchbut.lua ${srczfs}/${fs} ${srczfs}/${fs}@$snaphead $last_on_dest $last_on_src $lastvalidsnap"
+      there "zfs program ${srczfs%%/*} /tmp/delsnapsmatchbut.lua ${srczfs}/${fs} $snaphead $last_on_dest $last_on_src $lastvalidsnap"
     fi
   fi
   if [ "${last_on_dest}" != "${last_on_src}" ]; then
