@@ -52,5 +52,5 @@ destroy_recursive(argv[1])
  
 results["deleted"] = deleted
 results["failed"] = failed
-results["skipped"] = skipped
+--results["skipped"] = skipped
 return results
