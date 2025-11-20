@@ -33,6 +33,8 @@ mkdir -p ${TMPDIR}
 LISTSRC="${TMPDIR}/src"
 LISTDST="${TMPDIR}/dst"
 snaphead="${sourcehost%.*}-$(hostname -s)"
+mydir=$(realpath "$(dirname "$0")")
+LUADIR="$mydir/../zfs-program"
 
 echo "disable cron"
 crontab -l | sed 's@^\([0-9].*sync_zfs_pra_from.sh .* '$dstzfs'\)$@#\1@' | crontab -
@@ -43,6 +45,10 @@ if ! lockf -t 0 /var/run/$LOGNAME.lock /bin/echo "no lock"; then
   pgrep -fl sync_zfs_pra_from.sh
   exit 1
 fi
+
+for script in $(ls $LUADIR/*.lua); do
+  scp -p ${LUADIR}/${script} ${sourcehost}/tmp
+done
 
 there "zfs list -H -oname -t snapshot -s creation -Honame,guid -r '$srczfs'" > "$LISTSRC" || exiterror "unable to list source snapshots"
 zfs list -H -oname -t snapshot -s creation -Honame,guid -r "$dstzfs" > $LISTDST || exiterror "unable to list dest snapshots"
@@ -91,7 +97,7 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
     if grep "${srczfs}/${fs}@$snaphead" "${LISTSRC}" | grep -qEv "@($last_on_dest|$last_on_src|$lastvalidsnap)"; then
       # suppression des snapshots de synchro intermediaires inutiles avant synchro
       echo " * delete needless sync snapshots on ${sourcehost}:${srczfs}/${fs}"
-      there "zfs list -Honame -tsnapshot ${srczfs}/${fs} | grep '${srczfs}/${fs}@$snaphead' | grep -Ev '@($last_on_dest|$last_on_src|$lastvalidsnap)' | xargs -L1 zfs destroy -d"
+      there "zfs program ${srczfs%%/*} /tmp/delsnapsmatchbut.lua ${srczfs}/${fs} ${srczfs}/${fs}@$snaphead $last_on_dest $last_on_src $lastvalidsnap"
     fi
   fi
   if [ "${last_on_dest}" != "${last_on_src}" ]; then
@@ -136,7 +142,7 @@ if [ $errcount -eq 0 ]; then
   fi
   if grep "^${srczfs}@${snaphead}" "$LISTSRC" | grep -qEv "${srczfs}@(${lastsrc}|${lastdst}|${lastvalidsnap})"; then
     # suppression des snapshots de synchro intermediaires inutiles
-    there "zfs list -Honame -tsnapshot -r -d1 ${srczfs} | grep '^${srczfs}@${snaphead}' | grep -Ev '${srczfs}@(${lastsrc}|${lastdst}|${lastvalidsnap})' | xargs -t -L1 zfs destroy -d"
+    there "zfs program ${srczfs%%/*} /tmp/delsnapsmatchbut.lua ${srczfs} $snaphead $lastsrc $lastdst $lastvalidsnap"
   fi
   if zfs list ${dstzfs}@${lastsrc} > /dev/null 2>&1; then
     zfs rollback -r ${dstzfs}@${lastsrc}
