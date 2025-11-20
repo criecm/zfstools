@@ -77,18 +77,18 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
       RESYNC=${fs}
     fi
   fi
-  if [ -n "${last_on_dest}" ] && [ "$(grep "^${dstzfs}/${fs}@" "${LISTDST}" | tail -1 | cut -f1)" != "${last_on_dest}" ]; then
+  if [ -n "${last_on_dest}" ] && [ "$(grep "^${dstzfs}/${fs}@" "${LISTDST}" | tail -1 | cut -f1 | cut -d@ -f2)" != "${last_on_dest}" ]; then
     # rollback to last common
     echo " * rollback to ${dstzfs}/${fs}@${last_on_dest} on dest"
     here zfs rollback -r "${dstzfs}/${fs}@${last_on_dest}"
   fi
   last_on_src=$(fgrep "${srczfs}/${fs}@${lastsrcsnap}" "${LISTSRC}" | tail -1 | cut -f1 | cut -d@ -f2)
   if [ -z "${last_on_src}" ]; then
-    echo " * no snap ${srczfs}/${fs}@${lastsrcsnap}, skip (is it new)"
+    echo " * no snap ${srczfs}/${fs}@${lastsrcsnap}, skip (ok if new)"
     continue
   fi
   if [ -n "${last_on_dest}" ] || [ "x$RESYNC" = "x${fs}" ]; then
-    if grep '${srczfs}/${fs}@$snaphead' "${LISTSRC}" | grep -qEv '@($last_on_dest|$last_on_src|$lastvalidsnap)'; then
+    if grep "${srczfs}/${fs}@$snaphead" "${LISTSRC}" | grep -qEv "@($last_on_dest|$last_on_src|$lastvalidsnap)"; then
       # suppression des snapshots de synchro intermediaires inutiles avant synchro
       echo " * delete needless sync snapshots on ${sourcehost}:${srczfs}/${fs}"
       there "zfs list -Honame -tsnapshot ${srczfs}/${fs} | grep '${srczfs}/${fs}@$snaphead' | grep -Ev '@($last_on_dest|$last_on_src|$lastvalidsnap)' | xargs -L1 zfs destroy -d"
@@ -134,7 +134,7 @@ if [ $errcount -eq 0 ]; then
     echo "Erreur avec $srczfs: $lastsrcsnap a disparu !" >&2
     exit 1
   fi
-  if grep '^${srczfs}@${snaphead}' "$LISTSRC" | grep -qEv '${srczfs}@(${lastsrc}|${lastdst}|${lastvalidsnap})'; then
+  if grep "^${srczfs}@${snaphead}" "$LISTSRC" | grep -qEv "${srczfs}@(${lastsrc}|${lastdst}|${lastvalidsnap})"; then
     # suppression des snapshots de synchro intermediaires inutiles
     there "zfs list -Honame -tsnapshot -r -d1 ${srczfs} | grep '^${srczfs}@${snaphead}' | grep -Ev '${srczfs}@(${lastsrc}|${lastdst}|${lastvalidsnap})' | xargs -t -L1 zfs destroy -d"
   fi
