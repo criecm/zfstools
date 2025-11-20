@@ -32,6 +32,7 @@ trace="/var/db/zfs_sent_$(echo "$zfs_fs" | sed 's/\//_/g')-${to}"
 mylog="/var/log/zfs_pra/sent_$(echo "$zfs_fs" | sed 's/\//_/g')-${to}"
 mypid=$$
 from="$(hostname -s)"
+mydir=$(realpath "$(dirname "$0")")
 
 logue() {
   echo "$(date) send_zfs_pra[${mypid}] $@" >> ${mylog}
@@ -71,10 +72,15 @@ case "$command" in
     rm "$trace"
     # menage
     if [ "$(date +%u)" -eq 0 ] && [ "$(date +%H)" -lt 2 ]; then
-      for snap in $(zfs list -r -Honame -t snapshot -d 1 "$zfs_fs" | grep "${zfs_fs}@${from}-${to}-" | grep -v "${zfs_fs}@${from}-${to}-${now}"); do
-        logue "zfs destroy -r $snap (menage)"
-        zfs destroy -rd "$snap" 2| tee -a ${mylog}
-      done
+      if [ -e "$mydir/../zfs-program/delsnapsmatchbut.lua" ]; then
+        logue "zfs program ${zfs_fs%%/*} $mydir/../zfs-program/delsnapsmatchbut.lua $zfs_fs ${from}%-${to}%- ${from}%-${to}%-${now}"
+        zfs program ${zfs_fs%%/*} "$mydir/../zfs-program/delsnapsmatchbut.lua" "$zfs_fs" "${from}%-${to}%-" "${from}%-${to}%-${now}" | tee -a $mylog
+      else
+        for snap in $(zfs list -r -Honame -t snapshot -d 1 "$zfs_fs" | grep "${zfs_fs}@${from}-${to}-" | grep -v "${zfs_fs}@${from}-${to}-${now}"); do
+          logue "zfs destroy -r $snap (menage)"
+          zfs destroy -rd "$snap" 2| tee -a ${mylog}
+        done
+      fi
       if [ "$(zfs get -s local -H -ovalue lastbackup:$to $zfs_fs)" != "-" ]; then
         logue "zfs inherit lastbackup:$to $zfs_fs (menage)"
         zfs inherit "lastbackup:${to}" "${zfs_fs}"
