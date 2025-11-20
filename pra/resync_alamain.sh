@@ -46,8 +46,8 @@ if ! lockf -t 0 /var/run/$LOGNAME.lock /bin/echo "no lock"; then
   exit 1
 fi
 
-for script in $(ls $LUADIR/*.lua); do
-  scp -p ${LUADIR}/${script} ${sourcehost}/tmp
+for script in $(ls $LUADIR/| grep "\.lua$"); do
+  scp -p ${LUADIR}/${script} ${sourcehost}:/tmp
 done
 
 there "zfs list -H -oname -t snapshot -s creation -Honame,guid -r '$srczfs'" > "$LISTSRC" || exiterror "unable to list source snapshots"
