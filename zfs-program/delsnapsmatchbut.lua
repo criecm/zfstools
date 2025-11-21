@@ -50,7 +50,9 @@ end
 
 destroy_recursive(argv[1])
  
-results["deleted"] = deleted
-results["failed"] = failed
---results["skipped"] = skipped
+results["deleted"] = #deleted
+if #failed > 0 then
+  results["failed"] = #failed
+end
+--results["skipped"] = #skipped
 return results
