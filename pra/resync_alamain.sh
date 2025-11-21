@@ -149,7 +149,7 @@ if [ $errcount -eq 0 ]; then
   if zfs list ${dstzfs}@${lastsrc} > /dev/null 2>&1; then
     here zfs rollback -r ${dstzfs}@${lastsrc}
   elif [ "${lastsrc}" != "${lastdst}" ]; then
-    there zfs send -I"@${lastdst}" "${srczfs}${lastsrc}" | here "mbuffer -q | zfs receive -F ${dstzfs}" || exiterror "PB a la synchro finale"
+    there zfs send -I"@${lastdst}" "${srczfs}" | here "mbuffer -q | zfs receive -F ${dstzfs}" || exiterror "PB a la synchro finale"
   fi 
   lastsrcsnap=${lastsrc}
   lastsnaptime=${lastsrcsnap##*-}
