@@ -51,7 +51,7 @@ for script in $(ls $LUADIR/| grep "\.lua$"); do
 done
 
 there "zfs list -H -oname -t snapshot -s creation -Honame,guid -r '$srczfs'" > "$LISTSRC" || exiterror "unable to list source snapshots"
-zfs list -H -oname -t snapshot -s creation -Honame,guid -r "$dstzfs" > $LISTDST || exiterror "unable to list dest snapshots"
+here zfs list -H -oname -t snapshot -s creation -Honame,guid -r "$dstzfs" > $LISTDST || exiterror "unable to list dest snapshots"
 
 errcount=0
 errwith=""
@@ -78,8 +78,8 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
     done
     # destroy $fs on dest if no common snapshot on dest
     if [ -z "${last_on_dest}" ]; then
-      echo " * no sync snap for ${dstzfs}/${fs}: destroy $fs"
-      here zfs destroy -r "${dstzfs}/${fs}"
+      echo " * no sync snap for ${dstzfs}/${fs}: destroy $fs if exists"
+      here "zfs list -Honame '${dstzfs}/${fs}' 2>/dev/null && zfs destroy -r '${dstzfs}/${fs}'"
       RESYNC=${fs}
     fi
   fi
@@ -97,13 +97,14 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
     if grep "${srczfs}/${fs}@$snaphead" "${LISTSRC}" | grep -qEv "@($last_on_dest|$last_on_src|$lastvalidsnap)"; then
       # suppression des snapshots de synchro intermediaires inutiles avant synchro
       echo " * delete needless sync snapshots on ${sourcehost}:${srczfs}/${fs}"
-      there "zfs program ${srczfs%%/*} /tmp/delsnapsmatchbut.lua ${srczfs}/${fs} $snaphead $last_on_dest $last_on_src $lastvalidsnap"
+      luaargs=$(echo $snaphead $last_on_dest $last_on_src $lastvalidsnap | sed 's/-/%-/g')
+      there "zfs program ${srczfs%%/*} /tmp/delsnapsmatchbut.lua ${srczfs}/${fs} $luaargs"
     fi
   fi
   if [ "${last_on_dest}" != "${last_on_src}" ]; then
     # synchro vers $lastsrcsnap, incrémental si possible
     echo " * sync ${srczfs}/${fs}@${last_on_src} ${last_on_dest:+"(inc from @${last_on_dest})"} to ${dstzfs}/${fs}"
-    if ! there zfs send -R ${last_on_dest:+"-I@${last_on_dest}"} "${srczfs}/${fs}@${last_on_src}" | here "mbuffer -q | zfs receive -vF ${dstzfs}/${fs}"; then
+    if ! there zfs send -R ${last_on_dest:+"-I@${last_on_dest}"} "${srczfs}/${fs}@${last_on_src}" | here "mbuffer -q | zfs receive -F ${dstzfs}/${fs}"; then
       errcount=$(( errcount + 1 ))
       errwith="${fs}\n$errwith"
     fi
@@ -142,12 +143,13 @@ if [ $errcount -eq 0 ]; then
   fi
   if grep "^${srczfs}@${snaphead}" "$LISTSRC" | grep -qEv "${srczfs}@(${lastsrc}|${lastdst}|${lastvalidsnap})"; then
     # suppression des snapshots de synchro intermediaires inutiles
+    luaargs=$(echo $snaphead $lastsrc $lastdst $lastvalidsnap | sed 's/-/%-/g')
     there "zfs program ${srczfs%%/*} /tmp/delsnapsmatchbut.lua ${srczfs} $snaphead $lastsrc $lastdst $lastvalidsnap"
   fi
   if zfs list ${dstzfs}@${lastsrc} > /dev/null 2>&1; then
-    zfs rollback -r ${dstzfs}@${lastsrc}
+    here zfs rollback -r ${dstzfs}@${lastsrc}
   elif [ "${lastsrc}" != "${lastdst}" ]; then
-    there zfs send -I"@${lastdst}" "${srczfs}${lastsrc}" | here "mbuffer -q | zfs receive -vF ${dstzfs}" || exiterror "PB a la synchro finale"
+    there zfs send -I"@${lastdst}" "${srczfs}${lastsrc}" | here "mbuffer -q | zfs receive -F ${dstzfs}" || exiterror "PB a la synchro finale"
   fi 
   lastsrcsnap=${lastsrc}
   lastsnaptime=${lastsrcsnap##*-}
