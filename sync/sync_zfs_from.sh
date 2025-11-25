@@ -122,5 +122,5 @@ ssh -oIdentitiesOnly=yes -oBatchMode=yes -ax -oControlMaster=auto -oControlPath=
 [ ! -z "$KEEPEXPR" ] && $SNAPSCRIPT -r -c $KEEPEXPR $DSTVOL >> /var/log/$LOGNAME.log
 
 if [ -x "/root/sync_zfs_actions.$(echo $DSTVOL | sed 's@/@_@g').sh" ]; then
-    /root/sync_zfs_actions.$(echo $DSTVOL | sed 's@/@_@g').sh before
+    /root/sync_zfs_actions.$(echo $DSTVOL | sed 's@/@_@g').sh after
 fi
