@@ -36,8 +36,10 @@ snaphead="${sourcehost%.*}-$(hostname -s)"
 mydir=$(realpath "$(dirname "$0")")
 LUADIR="$mydir/../zfs-program"
 
-echo "disable cron"
-crontab -l | sed 's@^\([0-9].*sync_zfs_pra_from.sh .* '$dstzfs'\)$@#\1@' | crontab -
+if crontab -l | grep -q '[0-9].*sync_zfs_pra_from.sh .* '$dstzfs; then
+  echo "disable cron"
+  crontab -l | sed 's@^\([0-9].*sync_zfs_pra_from.sh .* '$dstzfs'\)$@#RESYNC#\1@' | crontab -
+fi
 
 LOGNAME=sync_$(echo $DST | sed 's/[^-a-zA-Z0-9_]/_/g;')
 if ! lockf -t 0 /var/run/$LOGNAME.lock /bin/echo "no lock"; then
@@ -159,7 +161,7 @@ if [ $errcount -eq 0 ]; then
   there "rm /var/db/zfs_sent_$(echo "$srczfs" | sed 's/\//_/g')-$(hostname -s)"
 
   echo "re-enable cron"
-  crontab -l | sed 's@^#\([0-9].*sync_zfs_pra_from.sh .* '$dstzfs'\)$@\1@' | crontab -
+  crontab -l | sed 's@^#RESYNC#\([0-9].*sync_zfs_pra_from.sh .* '$dstzfs'\)$@\1@' | crontab -
 
 else
   echo "$errcount ERREURS"
