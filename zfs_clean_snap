@@ -63,11 +63,10 @@ getsnapdate() {
 }
 say() {
   if [ -z "$CLEANSNAP_FAKE" ]; then
-    if [ -z "$TERM" ]; then
-      echo "$0[$$]" $@ >> /var/log/clean_zfs_snaps.log
-    else
-      echo "$0[$$]" $@ | tee -a /var/log/clean_zfs_snaps.log
+    if [ -n "$TERM" ]; then
+      echo "$0[$$]" $@
     fi
+    echo $(date) $@ >> /var/log/clean_zfs_snaps.log
   else
     echo $@
   fi
