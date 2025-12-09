@@ -83,7 +83,7 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
     # destroy $fs on dest if no common snapshot on dest
     if [ -z "${last_on_dest}" ]; then
       echo " * no sync snap for ${dstzfs}/${fs}: destroy $fs if exists"
-      here "zfs list -Honame '${dstzfs}/${fs}' 2>/dev/null && zfs destroy -r '${dstzfs}/${fs}'"
+      here "zfs list -Honame '${dstzfs}/${fs}' 2>/dev/null && zfs destroy -r '${dstzfs}/${fs}'" || :
       RESYNC=${fs}
     fi
   fi
