@@ -99,7 +99,8 @@ for fs in $(sed 's/@.*$//' "$LISTSRC" | grep "${srczfs}/" | sort -u | sed "s#^${
     if grep "${srczfs}/${fs}@$snaphead" "${LISTSRC}" | grep -qEv "@($last_on_dest|$last_on_src|$lastvalidsnap)"; then
       # suppression des snapshots de synchro intermediaires inutiles avant synchro
       echo " * delete needless sync snapshots on ${sourcehost}:${srczfs}/${fs}"
-      luaargs=$(echo $snaphead $last_on_dest $last_on_src $lastvalidsnap | sed 's/-/%-/g')
+      excludes=$(echo $last_on_dest; echo $last_on_src; echo $lastvalidsnap | sort -u)
+      luaargs=$(echo $snaphead $excludes | sed 's/-/%-/g')
       there "zfs program ${srczfs%%/*} /tmp/delsnapsmatchbut.lua ${srczfs}/${fs} $luaargs"
     fi
   fi
@@ -145,7 +146,8 @@ if [ $errcount -eq 0 ]; then
   fi
   if grep "^${srczfs}@${snaphead}" "$LISTSRC" | grep -qEv "${srczfs}@(${lastsrc}|${lastdst}|${lastvalidsnap})"; then
     # suppression des snapshots de synchro intermediaires inutiles
-    luaargs=$(echo $snaphead $lastsrc $lastdst $lastvalidsnap | sed 's/-/%-/g')
+    excludes=$(echo $lastsrc; echo $lastdst; echo $lastvalidsnap | sort -u)
+    luaargs=$(echo $snaphead $excludes | sed 's/-/%-/g')
     there "zfs program ${srczfs%%/*} /tmp/delsnapsmatchbut.lua ${srczfs} $snaphead $lastsrc $lastdst $lastvalidsnap"
   fi
   if zfs list ${dstzfs}@${lastsrc} > /dev/null 2>&1; then
