@@ -1,5 +1,7 @@
 #!/bin/sh
 #
+set -e
+
 exiterror() {
   echo $@
   exit 1
@@ -148,7 +150,8 @@ if [ $errcount -eq 0 ]; then
     # suppression des snapshots de synchro intermediaires inutiles
     excludes=$(echo $lastsrc; echo $lastdst; echo $lastvalidsnap | sort -u)
     luaargs=$(echo $snaphead $excludes | sed 's/-/%-/g')
-    there "zfs program ${srczfs%%/*} /tmp/delsnapsmatchbut.lua ${srczfs} $snaphead $lastsrc $lastdst $lastvalidsnap"
+    there "zfs program ${srczfs%%/*} /tmp/delsnapsmatchbut.lua ${srczfs} $snaphead $lastsrc $lastdst $lastvalidsnap" || \
+      there "zfs list -tsnap ${srczfs} | grep @$snaphead | grep -vE '($(echo $excludes | sed 's/ /|/g'))' | xargs -tL1 zfs destroy -d"
   fi
   if zfs list ${dstzfs}@${lastsrc} > /dev/null 2>&1; then
     here zfs rollback -r ${dstzfs}@${lastsrc}
