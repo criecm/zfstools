@@ -61,11 +61,13 @@ case "$command" in
     logger -p local4.info "zfs bookmark $zfs_fs@$from-$to-$now \"$zfs_fs$bookmark\""
     zfs bookmark $zfs_fs@$from-$to-$now "$zfs_fs$bookmark"
     logger -p local4.info "zfs destroy $zfs_fs@$from-$to-$now"
-    zfs destroy $zfs_fs@$from-$to-$now
+    migrationfile="/tmp/migrating_$(echo $zfs_fs | tr '/' '_')-$to"
+    [ -e "$migrationfile" ] || zfs destroy $zfs_fs@$from-$to-$now
     echo ${from}-${to}-${now}
+    [ -e "$migrationfile" ] && echo ${from}-${to}-${now} > "$migrationfile"
     rm $trace
     # menage
-    if [ $(date +%u) -eq 0 -a $(date +%H) -lt 2 ]; then
+    if [ $(date +%u) -eq 0 -a $(date +%H) -lt 2 ] && [ ! -e "$migrationfile" ]; then
       for snap in $(zfs list -r -Honame -t snapshot -d 1 $zfs_fs | grep "${zfs_fs}@${from}-${to}-"); do
         logger -p local4.info "zfs destroy -r $snap (menage)"
         zfs destroy -rd $snap
