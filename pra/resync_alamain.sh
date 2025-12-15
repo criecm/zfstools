@@ -160,10 +160,11 @@ if [ $errcount -eq 0 ]; then
   fi 
   lastsrcsnap=${lastsrc}
   lastsnaptime=${lastsrcsnap##*-}
-  there "zfs set lastpra:$(hostname -s)=${lastsrc} ${srczfs} && echo ${lastsnaptime} > zfs_sent_$(echo $srczfs | sed 's@/@_@g')-$(hostname -s)"
+  there "zfs set lastpra:$(hostname -s)=${lastsrc} ${srczfs}"
+  #there "echo ${lastsnaptime} > /var/db/zfs_sent_$(echo $srczfs | sed 's@/@_@g')-$(hostname -s)"
 
   # rm trace
-  there "rm /var/db/zfs_sent_$(echo "$srczfs" | sed 's/\//_/g')-$(hostname -s)"
+  there "rm /var/db/zfs_sent_$(echo "$srczfs" | sed 's/\//_/g')-$(hostname -s) 2>/dev/null || exit 0"
 
   echo "re-enable cron"
   crontab -l | sed 's@^#RESYNC#\([0-9].*sync_zfs_pra_from.sh .* '$dstzfs'.*\)$@\1@' | crontab -
