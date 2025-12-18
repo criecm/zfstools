@@ -43,7 +43,7 @@ logue "$SSH_ORIGINAL_COMMAND"
 case "$command" in
   health)
     lasttrace=$(cat "$trace" 2>/dev/null || echo -n "")
-    lastsync=$(zfs get -s local -H -ovalue lastbackup:$to $zfs_fs || echo "new")
+    lastsync=$(zfs get -s local -H -ovalue lastpra:$to $zfs_fs || echo "new")
     if [ -n "$lasttrace" ]; then
       if [ "${from}-${to}-${lasttrace}" = "${lastsync}" ]; then
         rm "${trace}"
