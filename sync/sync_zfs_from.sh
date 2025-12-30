@@ -8,7 +8,10 @@ unset SSH_AUTH_SOCK
 export LANG=C
 
 if [ "$LOCKED_SYNC_JAILS" != "YES_LOCKED" ]; then
-  export LOCKED_SYNC_JAILS="YES_LOCKED"
+  if [ $# -lt 3 ] || [ ! -f "$1" ]; then
+    echo "usage: $0 ssh_key srchost:zfs_source zfs_dest"
+    exit 1
+  fi
   SSHKEY=$1
   SRC=$2
   DST=$3
@@ -16,6 +19,7 @@ if [ "$LOCKED_SYNC_JAILS" != "YES_LOCKED" ]; then
   if [ $# -eq 4 ]; then
     KEEPEXPR=$4
   fi
+  export LOCKED_SYNC_JAILS="YES_LOCKED"
   LOGNAME=sync_$(echo $DST | sed 's/[^-a-zA-Z0-9_]/_/g;')
   MYTMPDIR=${TMPDIR:-/var/tmp}/sync_zfs
   mkdir -p -m 700 $MYTMPDIR
